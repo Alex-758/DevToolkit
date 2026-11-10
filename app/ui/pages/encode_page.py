@@ -7,6 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -108,6 +109,11 @@ class EncodePage(PageBase):
         self.enc_btn.setChecked(True)
         seg_h.addWidget(self.enc_btn)
         seg_h.addWidget(self.dec_btn)
+        # 互斥：同一时间只有一个方向处于选中态
+        self._dir_group = QButtonGroup(self)
+        self._dir_group.setExclusive(True)
+        self._dir_group.addButton(self.enc_btn)
+        self._dir_group.addButton(self.dec_btn)
 
         self.batch_chk = QCheckBox("逐行批量（每行独立处理）")
         self.batch_chk.setToolTip("勾选后对多行文本逐行独立执行，输出带行号，失败的行显示错误原因")

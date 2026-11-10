@@ -136,6 +136,11 @@ class CryptoPage(PageBase):
         self.dir_a.setChecked(True)
         seg_h.addWidget(self.dir_a)
         seg_h.addWidget(self.dir_b)
+        # 互斥：同一时间只有一个方向处于选中态
+        self._dir_group = QButtonGroup(self)
+        self._dir_group.setExclusive(True)
+        self._dir_group.addButton(self.dir_a)
+        self._dir_group.addButton(self.dir_b)
 
         self.exec_btn = btn("执行", "lock", variant="primary")
         set_btn_icon(self.exec_btn, "lock", "accent_fg")
@@ -187,6 +192,8 @@ class CryptoPage(PageBase):
         return self.algo_combo.currentData()
 
     def _direction(self) -> str:
+        if self._algo() == "rsa-pss":
+            return "verify" if self.dir_b.isChecked() else "sign"
         return "decrypt" if self.dir_b.isChecked() else "encrypt"
 
     def _update_in_meta(self):
@@ -507,10 +514,8 @@ class CryptoPage(PageBase):
                     if not text:
                         set_chip(self.out_header.chip_lbl, "✕ 输入为空：请输入被签名的原文", "err")
                         return
-                    data, err = parse_cipher_text(text)
-                    if err:
-                        set_chip(self.out_header.chip_lbl, f"✕ {err}", "err")
-                        return
+                    # 验签：原文是任意文本，直接按 UTF-8 字节参与校验；只有签名需要 Base64 解析
+                    data = text.encode("utf-8")
                     sig, sig_err = parse_cipher_text(self.sig_edit.text())
                     if sig_err:
                         set_chip(self.out_header.chip_lbl, f"✕ 签名格式无效：{sig_err}", "err")
