@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+
+# PyInstaller 构建产物
+build/
+dist/
+
+# 构建辅助文件
+*.spec.bak
+
+# 本地测试产物
+artifacts/
+
+# IDE
+.idea/
+.vscode/

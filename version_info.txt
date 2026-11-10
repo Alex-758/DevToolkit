@@ -1,0 +1,29 @@
+# DevToolkit 版本资源（PyInstaller 打包用）
+# UTF-8
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(1, 0, 0, 0),
+    prodvers=(1, 0, 0, 0),
+    mask=0x3F,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable('080404B0', [
+        StringStruct('CompanyName', 'DevToolkit'),
+        StringStruct('FileDescription', 'DevToolkit —— 纯离线运行的 Windows 编码解码工具箱'),
+        StringStruct('FileVersion', '1.0.0'),
+        StringStruct('InternalName', 'DevToolkit'),
+        StringStruct('LegalCopyright', 'MIT License'),
+        StringStruct('OriginalFilename', 'DevToolkit.exe'),
+        StringStruct('ProductName', 'DevToolkit'),
+        StringStruct('ProductVersion', '1.0.0')
+      ])
+    ]),
+    VarFileInfo([VarStruct('Translation', [2052, 1200])])
+  ]
+)

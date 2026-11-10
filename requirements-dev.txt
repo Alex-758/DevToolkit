@@ -1,0 +1,4 @@
+# DevToolkit 开发 / 构建依赖
+-r requirements.txt
+pytest>=8
+pyinstaller>=6.0
