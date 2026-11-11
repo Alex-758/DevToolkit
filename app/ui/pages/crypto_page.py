@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import re
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -34,6 +35,7 @@ from ..widgets import (
     CardHeader,
     IOEditor,
     PageHeader,
+    WorkerRunner,
     banner,
     btn,
     elapsed_ms,
@@ -62,8 +64,18 @@ def parse_cipher_text(text: str):
     if not s:
         return None, "输入为空：请提供待解密 / 验签的密文"
     compact = "".join(s.split())
+    force_b64 = False
     if compact[:5].lower() == "b64:":
         compact = compact[5:]
+        force_b64 = True
+    # 纯十六进制串优先按 Hex 解析：hex 字符集是 Base64 字母表的子集，
+    # 若先试 Base64，长度恰为 4 的倍数的 Hex 密文会被误解析成垃圾字节
+    if not force_b64 and len(compact) >= 16 and len(compact) % 2 == 0 \
+            and all(c in "0123456789abcdefABCDEF" for c in compact):
+        try:
+            return bytes.fromhex(compact), ""
+        except ValueError:
+            pass
     try:
         return base64.b64decode(compact, validate=True), ""
     except (binascii.Error, ValueError):
@@ -183,6 +195,8 @@ class CryptoPage(PageBase):
         root.addStretch(1)
 
         self._binary_out = None  # 非文本解密结果的字节缓存
+        self.rsa_runner = WorkerRunner(self._on_keypair_done, None, self)
+        self._gen_algo = ""
         self._on_algo_change()
         QShortcut(QKeySequence("Ctrl+Return"), self, self._execute)
 
@@ -225,6 +239,9 @@ class CryptoPage(PageBase):
         if algo.startswith("rsa"):
             self._build_rsa_params(algo)
         else:
+            # 离开 RSA 参数区：取消进行中的密钥生成（结果将过期丢弃）
+            if self.rsa_runner.busy():
+                self.rsa_runner.stop()
             self._build_symmetric_params(algo)
         # 方向文案随算法变化
         is_sign = algo == "rsa-pss"
@@ -392,16 +409,30 @@ class CryptoPage(PageBase):
         self.params_inner.addWidget(banner("ok", "✓ 生成密钥对后请立即导出保存私钥；公钥可分发给别人。私钥绝不写入历史记录。"))
 
     def _gen_rsa(self):
-        bits = self.rsa_bits_combo.currentData()
-        r = ct.generate_keypair(bits)
-        if not r.ok:
-            QMessageBox.warning(self, "生成失败", r.error)
+        # RSA 密钥生成（尤其 4096 位，实测约 2.5 秒）放后台线程，避免冻结界面
+        if self.rsa_runner.busy():
             return
-        self.rsa_key_edit.setPlainText(r.data["private_pem"])
+        bits = self.rsa_bits_combo.currentData()
+        self._gen_algo = self._algo()
+        self.gen_btn.setEnabled(False)
+        self.gen_btn.setText("生成中…")
+        self.statusMsg.emit(f"正在后台生成 {bits} 位 RSA 密钥对（大密钥需要数秒，请稍候）…")
+        self.rsa_runner.start(lambda _worker: ct.generate_keypair(bits))
+
+    def _on_keypair_done(self, result):
+        if self._algo() != self._gen_algo:
+            return  # 算法已切换：结果过期，不操作已重建的控件
+        self.gen_btn.setEnabled(True)
+        self.gen_btn.setText("生成密钥对")
+        if not result.ok:
+            QMessageBox.warning(self, "生成失败", result.error)
+            return
+        bits = result.meta.get("bits")
+        self.rsa_key_edit.setPlainText(result.data["private_pem"])
         self.statusMsg.emit(f"已生成 {bits} 位 RSA 密钥对")
         QMessageBox.information(
             self, "密钥对已生成",
-            "私钥已填入密钥框，请立即导出保存。\n\n公钥（分发给对方使用）：\n\n" + r.data["public_pem"],
+            "私钥已填入密钥框，请立即导出保存。\n\n公钥（分发给对方使用）：\n\n" + result.data["public_pem"],
         )
 
     def _import_rsa(self):

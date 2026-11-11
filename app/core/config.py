@@ -15,6 +15,29 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "batch_skip_empty": True,   # 批量处理时跳过空行
 }
 
+# 数值设置的合法区间：越界 / 非法值一律回落默认，防止下游 int() 崩溃
+_NUM_RANGES: Dict[str, tuple] = {
+    "max_layers": (1, 10),
+    "decompress_cap_mb": (16, 4096),
+    "history_limit": (10, 1000),
+}
+
+
+def _sanitize_setting(key: str, value: Any) -> Any:
+    """清洗单个设置值：类型 / 取值非法时回落默认值。"""
+    if key in _NUM_RANGES:
+        try:
+            iv = int(value)
+        except (TypeError, ValueError):
+            return DEFAULT_SETTINGS[key]
+        lo, hi = _NUM_RANGES[key]
+        return max(lo, min(hi, iv))
+    if key == "theme":
+        return value if value in ("dark", "light") else DEFAULT_SETTINGS[key]
+    if key == "batch_skip_empty":
+        return bool(value) if isinstance(value, (bool, int)) else DEFAULT_SETTINGS[key]
+    return value
+
 
 def get_data_dir() -> Path:
     """数据目录：%APPDATA%\\DevToolkit，取不到 APPDATA 时退回用户目录。"""
@@ -43,16 +66,16 @@ def get_favorites_path() -> Path:
 
 
 def load_settings() -> Dict[str, Any]:
-    """读取设置；文件损坏时返回默认值（绝不因此崩溃）。"""
+    """读取设置；文件损坏或字段非法时回落默认值（绝不因此崩溃）。"""
     settings = dict(DEFAULT_SETTINGS)
     path = get_settings_path()
     try:
         if path.is_file():
             raw = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(raw, dict):
-                for key, default in DEFAULT_SETTINGS.items():
+                for key in DEFAULT_SETTINGS:
                     if key in raw:
-                        settings[key] = raw[key]
+                        settings[key] = _sanitize_setting(key, raw[key])
     except (OSError, ValueError):
         pass
     return settings
@@ -63,7 +86,7 @@ def save_settings(settings: Dict[str, Any]) -> bool:
         data = dict(DEFAULT_SETTINGS)
         for key in DEFAULT_SETTINGS:
             if key in settings:
-                data[key] = settings[key]
+                data[key] = _sanitize_setting(key, settings[key])
         path = get_settings_path()
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")

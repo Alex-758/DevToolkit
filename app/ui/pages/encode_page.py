@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -40,6 +40,9 @@ from . import PageBase
 
 PAGE_NAME = "编码解码"
 
+# 编码页处理的是文本：与 core 的 MAX_INPUT_CHARS（8M 字符）对齐，超大文件请走文件处理页
+MAX_IMPORT_BYTES = 8 * 1024 * 1024
+
 
 class EncodePage(PageBase):
     def __init__(self, parent=None):
@@ -62,7 +65,12 @@ class EncodePage(PageBase):
 
         # ---- 输入区 ----
         self.in_card, self.in_header, self.in_edit = io_card("输入内容", "0 字符", min_lines=4)
-        self.in_edit.textChanged.connect(self._update_in_meta)
+        # 大文本时逐键全量 encode 会造成卡顿：300ms 防抖后统一更新计数
+        self._meta_timer = QTimer(self)
+        self._meta_timer.setSingleShot(True)
+        self._meta_timer.setInterval(300)
+        self._meta_timer.timeout.connect(self._update_in_meta)
+        self.in_edit.textChanged.connect(self._meta_timer.start)
         self.paste_btn = btn("粘贴", "paste")
         set_btn_icon(self.paste_btn, "paste")
         self.paste_btn.clicked.connect(self._paste)
@@ -236,7 +244,20 @@ class EncodePage(PageBase):
 
     def _load_file(self, path: str):
         try:
-            data = Path(path).read_bytes()
+            p = Path(path)
+            size = p.stat().st_size
+        except OSError as exc:
+            QMessageBox.warning(self, "导入失败", f"无法读取文件：{exc}")
+            return
+        if size > MAX_IMPORT_BYTES:
+            QMessageBox.warning(
+                self, "文件过大",
+                f"文件 {size / 1024 / 1024:.1f} MB 超过编码页 8 MB 文本上限。\n"
+                "大文件的 Base64 / 哈希 / 压缩请使用「文件处理」页（后台线程处理，界面不卡顿）。",
+            )
+            return
+        try:
+            data = p.read_bytes()
         except OSError as exc:
             QMessageBox.warning(self, "导入失败", f"无法读取文件：{exc}")
             return

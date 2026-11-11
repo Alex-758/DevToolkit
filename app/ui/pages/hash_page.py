@@ -282,6 +282,9 @@ class HashPage(PageBase):
         set_chip(self.hash_header.chip_lbl,
                  f"✓ 文件 {name} · {result.meta['in_bytes']:,} 字节", "ok")
         self.in_edit.setPlainText("")
+        # 清空输入会同步触发 textChanged 并重启 300ms 自动重算定时器，
+        # 若不停止，定时器到点会用「空文本哈希」覆盖刚显示的文件哈希结果
+        self._timer.stop()
         self.historyAdd.emit(PAGE_NAME, "文件哈希", f"{name} · {result.meta['in_bytes']:,} 字节")
         self.statusMsg.emit(f"文件哈希完成：{name}")
 

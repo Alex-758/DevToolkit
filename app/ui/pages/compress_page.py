@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import re
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -101,6 +102,11 @@ class CompressPage(PageBase):
         self.comp_btn.setChecked(True)
         seg_h.addWidget(self.comp_btn)
         seg_h.addWidget(self.decomp_btn)
+        # 互斥：同一时间只有一个方向处于选中态（与编码 / 加密页一致）
+        self._dir_group = QButtonGroup(self)
+        self._dir_group.setExclusive(True)
+        self._dir_group.addButton(self.comp_btn)
+        self._dir_group.addButton(self.decomp_btn)
 
         self.b64_chk = QCheckBox("输出以 Base64 显示")
         self.b64_chk.setChecked(True)
@@ -197,10 +203,19 @@ class CompressPage(PageBase):
             data = None
             if self.auto_b64_chk.isChecked():
                 compact = "".join(text.split())
-                try:
-                    data = base64.b64decode(compact, validate=True)
-                except (binascii.Error, ValueError):
-                    data = None
+                # 纯十六进制串优先按 Hex 解码：Hex 显示的压缩结果粘回时，
+                # 若先试 Base64，长度恰为 4 的倍数的 hex 会被误解析成垃圾字节
+                if len(compact) >= 16 and len(compact) % 2 == 0 \
+                        and re.fullmatch(r"[0-9a-fA-F]+", compact):
+                    try:
+                        data = bytes.fromhex(compact)
+                    except ValueError:
+                        data = None
+                if data is None:
+                    try:
+                        data = base64.b64decode(compact, validate=True)
+                    except (binascii.Error, ValueError):
+                        data = None
             if data is None:
                 data = raw
             # 自动识别格式兜底：用户选的格式解不开时，尝试按魔数识别
