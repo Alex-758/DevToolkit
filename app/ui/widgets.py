@@ -22,6 +22,11 @@ from ..core.results import Result
 # 超长输出的显示截断阈值（复制 / 保存仍使用完整数据）
 DISPLAY_TRUNCATE = 200_000
 
+# 自动换行开关阈值：QPlainTextEdit 的 wrap 布局耗时随单块文本长度平方增长
+# （实测 0.5MB ≈ 4.9s、1MB ≈ 20s、8MB 分钟级）；NoWrap 为线性（8MB ≈ 4.5s）。
+# 超过阈值自动切为不换行（横向滚动），回落到阈值以内时恢复换行。
+WRAP_TOGGLE_CHARS = 64_000
+
 MONO_FONT = QFont("Consolas")
 MONO_FONT.setStyleHint(QFont.StyleHint.Monospace)
 MONO_FONT.setPointSize(9)
@@ -144,6 +149,8 @@ def banner(kind: str, text: str) -> QLabel:
     lbl.setProperty("dtBanner", True)
     lbl.setProperty("kind", kind)
     lbl.setWordWrap(True)
+    # 同 PageHeader：wordWrap 标签会参与富余空间分配，横幅高度应贴住内容
+    lbl.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
     return lbl
 
 
@@ -173,10 +180,46 @@ class IOEditor(QPlainTextEdit):
         self._placeholder = ""
         self._preedit = ""
         self.set_placeholder("在此粘贴或输入内容…" if not readonly else "结果将显示在这里")
+        self.textChanged.connect(self._update_wrap_mode)
 
     def set_placeholder(self, text: str) -> None:
         self._placeholder = text
         self.update()
+
+    # ------------------------------------------------------------------
+    # 大文本换行策略：wrap 布局对超长单块文本是平方级卡顿（分钟级），
+    # 超过阈值切为不换行；所有写入路径都要先经过 _preset_wrap 预判，
+    # 否则会先在 wrap 模式下卡完全程再切换（失去意义）。
+    # ------------------------------------------------------------------
+    def _preset_wrap(self, n_chars: int) -> None:
+        """按即将写入的长度预设换行模式。
+
+        缩小方向不立即恢复 wrap：若当前文档仍超阈值，切换模式会对旧内容
+        触发平方级重排；维持 NoWrap，等 textChanged 在文档更新后收敛。
+        """
+        if n_chars > WRAP_TOGGLE_CHARS:
+            self._set_wrap(QPlainTextEdit.LineWrapMode.NoWrap)
+        elif self.document().characterCount() <= WRAP_TOGGLE_CHARS:
+            self._set_wrap(QPlainTextEdit.LineWrapMode.WidgetWidth)
+
+    def _set_wrap(self, mode) -> None:
+        if mode != self.lineWrapMode():
+            self.setLineWrapMode(mode)
+
+    def _update_wrap_mode(self) -> None:
+        # characterCount 为 Qt 维护的缓存计数，O(1)
+        self._preset_wrap(self.document().characterCount())
+
+    def setPlainText(self, text: str) -> None:
+        self._preset_wrap(len(text or ""))
+        super().setPlainText(text)
+
+    def insertFromMimeData(self, source) -> None:
+        # 粘贴 / 拖放：预先按剪贴板内容长度切换换行模式
+        text = source.text() if source is not None else ""
+        if text:
+            self._preset_wrap(len(text))
+        super().insertFromMimeData(source)
 
     def paintEvent(self, event) -> None:
         super().paintEvent(event)
@@ -227,6 +270,9 @@ class PageHeader(QWidget):
 
     def __init__(self, title: str, subtitle: str = "", parent=None):
         super().__init__(parent)
+        # 垂直方向贴住内容高度：内部 wordWrap 标签会把容器标记为可扩展，
+        # 页面富余空间会被按 sizeHint 权重错误分给标题行（如历史页被拉高 3 倍）
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         left = QVBoxLayout()

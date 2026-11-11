@@ -221,10 +221,18 @@ class FilesPage(PageBase):
             )
         if op == "gzip":
             import gzip as _gzip
-
-            def report(d, t):
-                pass
-            out = _gzip.compress(data, 6)
+            import io as _io
+            # 分块写入以支持进度上报与取消（gzip.compress 一次性完成，大文件期间进度条静止）
+            buf = _io.BytesIO()
+            total = len(data)
+            step = 4 * 1024 * 1024
+            with _gzip.GzipFile(fileobj=buf, mode="wb", compresslevel=6) as gz:
+                for i in range(0, total, step):
+                    if worker.is_cancelled():
+                        return Result.failure("已取消")
+                    gz.write(data[i:i + step])
+                    worker.report(min(i + step, total), total)
+            out = buf.getvalue()
             return Result.success(
                 {"kind": "binary", "text": "", "meta": f"GZIP 压缩 · {len(data):,} B → {len(out):,} B",
                  "binary": out, "out_name": Path(path).name + ".gz", "ms": elapsed_ms(t0)},

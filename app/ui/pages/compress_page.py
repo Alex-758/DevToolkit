@@ -117,12 +117,18 @@ class CompressPage(PageBase):
         set_btn_icon(self.exec_btn, "play", "accent_fg")
         self.exec_btn.clicked.connect(self._execute)
 
-        for w in (fmt_lbl, self.fmt_combo, lvl_lbl, self.lvl_combo, dir_lbl, self.seg_frame,
-                  self.b64_chk, self.auto_b64_chk):
+        for w in (fmt_lbl, self.fmt_combo, lvl_lbl, self.lvl_combo, dir_lbl, self.seg_frame):
             row.addWidget(w)
         row.addStretch(1)
         row.addWidget(self.exec_btn)
         op_v.addLayout(row)
+        # 第二行：显示选项（与主操作行分离，避免窄窗口下复选框文字被截断）
+        chk_row = QHBoxLayout()
+        chk_row.setSpacing(14)
+        chk_row.addWidget(self.b64_chk)
+        chk_row.addWidget(self.auto_b64_chk)
+        chk_row.addStretch(1)
+        op_v.addLayout(chk_row)
         root.addWidget(op_card)
 
         # ---- 输出区 ----

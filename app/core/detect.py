@@ -34,6 +34,9 @@ def _clip_preview(s: str) -> str:
 def _try_preview(codec_id: str, text: str) -> str:
     """用对应编解码器尝试解码，返回预览文本；失败返回空串。"""
     from . import encoders
+    # Base58/62 解码耗时随长度平方增长，超限输入直接跳过预览（候选仍列出）
+    if codec_id in ("base58", "base62") and len(text) > encoders.B58_B62_MAX_CHARS:
+        return ""
     result = encoders.decode(codec_id, text, {"charset": "utf-8"})
     if result.ok and isinstance(result.data, str):
         decoded = result.data

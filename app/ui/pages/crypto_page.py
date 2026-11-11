@@ -285,7 +285,8 @@ class CryptoPage(PageBase):
         self.pass_lbl.setObjectName("dtMeta")
         self.pass_edit = QLineEdit()
         self.pass_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.pass_edit.setPlaceholderText("输入口令（不会被保存或写入历史）")
+        self.pass_edit.setPlaceholderText("输入口令（不保存 / 不入历史）")
+        self.pass_edit.setToolTip("口令仅用于本次派生密钥，不会被保存，也不会写入历史记录")
         grid.addWidget(self.pass_lbl, 1, 0)
         grid.addWidget(self.pass_edit, 1, 1)
 

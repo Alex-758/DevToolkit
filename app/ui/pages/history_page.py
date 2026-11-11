@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QSizePolicy,
     QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
@@ -72,6 +73,9 @@ class HistoryPage(PageBase):
 
         # ---- 列表 ----
         list_card = make_card()
+        # 卡片默认垂直 Maximum（贴内容）；列表页需要撑满剩余空间，否则
+        # 富余空间会被布局均摊成项间空隙
+        list_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         list_v = QVBoxLayout(list_card)
         list_v.setContentsMargins(1, 1, 1, 1)
         self.tree = QTreeWidget()

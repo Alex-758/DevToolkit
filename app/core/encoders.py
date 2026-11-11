@@ -28,6 +28,11 @@ from .results import Result
 
 MAX_INPUT_CHARS = 8_000_000  # 文本输入上限 8 MB，超大内容请走文件处理
 
+# Base58 / Base62 的编解码是纯 Python 大数运算，耗时随输入长度平方增长：
+# 实测 decode 32K 字符 ≈ 0.8s、128K ≈ 6.5s、8MB ≈ 小时级（等同卡死）；
+# encode 更陡（64K ≈ 10.7s）。其用例（地址 / 短 ID / token）远小于此上限。
+B58_B62_MAX_CHARS = 32_000
+
 BYTE_CODECS = ("base64", "base64url", "base32", "hex", "base58", "base62", "qp")
 
 
@@ -140,6 +145,11 @@ def _hex_bytes(compact: str) -> bytes:
 
 
 def _b58_bytes(s: str) -> bytes:
+    if len(s) > B58_B62_MAX_CHARS:
+        raise ValueError(
+            f"输入过大（{len(s):,} 字符）：Base58 解码耗时随长度平方增长，上限 {B58_B62_MAX_CHARS:,} 字符。"
+            "长内容请改用 Base64 / Hex"
+        )
     alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
     index = {ch: i for i, ch in enumerate(alphabet)}
     num = 0
@@ -160,6 +170,11 @@ def _b58_bytes(s: str) -> bytes:
 
 
 def _b62_bytes(s: str) -> bytes:
+    if len(s) > B58_B62_MAX_CHARS:
+        raise ValueError(
+            f"输入过大（{len(s):,} 字符）：Base62 解码耗时随长度平方增长，上限 {B58_B62_MAX_CHARS:,} 字符。"
+            "长内容请改用 Base64 / Hex"
+        )
     alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
     index = {ch: i for i, ch in enumerate(alphabet)}
     num = 0
@@ -397,6 +412,11 @@ def _b58_encode(text: str, params: dict) -> Result:
     guard = _check_input(text)
     if guard:
         return guard
+    if len(text) > B58_B62_MAX_CHARS:
+        return Result.failure(
+            f"输入过大（{len(text):,} 字符）：Base58 编码耗时随长度平方增长，上限 {B58_B62_MAX_CHARS:,} 字符。"
+            "长内容请改用 Base64 / Hex"
+        )
     charset = params.get("charset", "utf-8")
     try:
         raw = _to_bytes(text, charset)
@@ -454,6 +474,11 @@ def _b62_encode(text: str, params: dict) -> Result:
     guard = _check_input(text)
     if guard:
         return guard
+    if len(text) > B58_B62_MAX_CHARS:
+        return Result.failure(
+            f"输入过大（{len(text):,} 字符）：Base62 编码耗时随长度平方增长，上限 {B58_B62_MAX_CHARS:,} 字符。"
+            "长内容请改用 Base64 / Hex"
+        )
     charset = params.get("charset", "utf-8")
     try:
         raw = _to_bytes(text, charset)
