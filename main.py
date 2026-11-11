@@ -211,13 +211,14 @@ def run_smoke_ui(outdir: str) -> int:
     else:
         print("SMOKE: smart chain PASS")
 
-    # 交互 6：主题切换
+    # 交互 6：主题切换（不假设启动主题：持久化配置可能是深色或浅色）
+    before_theme = CTX.theme
     win.toggle_theme()
     app.processEvents()
-    if CTX.theme != "light":
+    if CTX.theme == before_theme:
         failures.append("theme: toggle failed")
     else:
-        win.grab().save(str(out / "page-light.png"))
+        win.grab().save(str(out / f"page-{CTX.theme}.png"))
         print("SMOKE: theme toggle PASS")
     win.toggle_theme()
     app.processEvents()

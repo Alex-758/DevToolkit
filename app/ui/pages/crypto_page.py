@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
-    QPlainTextEdit,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -32,8 +31,8 @@ from PySide6.QtWidgets import (
 
 from ...core import crypto_tools as ct
 from ..widgets import (
-    MONO_FONT,
     CardHeader,
+    IOEditor,
     PageHeader,
     banner,
     btn,
@@ -344,10 +343,8 @@ class CryptoPage(PageBase):
         grid.setVerticalSpacing(8)
         key_lbl = QLabel("RSA 密钥（PEM）")
         key_lbl.setObjectName("dtMeta")
-        self.rsa_key_edit = QPlainTextEdit()
-        self.rsa_key_edit.setProperty("mono", True)
-        self.rsa_key_edit.setFont(MONO_FONT)
-        self.rsa_key_edit.setPlaceholderText(
+        self.rsa_key_edit = IOEditor()
+        self.rsa_key_edit.set_placeholder(
             "-----BEGIN PUBLIC KEY----- 或 -----BEGIN PRIVATE KEY-----\n"
             "可在下方生成密钥对，或导入密钥文件"
         )

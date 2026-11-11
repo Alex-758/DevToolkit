@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 
 from PySide6.QtCore import QObject, Qt, QThread, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -155,17 +155,55 @@ def hline() -> QFrame:
 
 
 class IOEditor(QPlainTextEdit):
-    """等宽输入 / 输出编辑器。"""
+    """等宽输入 / 输出编辑器。
+
+    占位文本自绘而非用 QPlainTextEdit.setPlaceholderText：Qt 原生占位文本
+    只检查「文档为空」就绘制，而输入法合成（预编辑）文字不写入文档，
+    合成期间会与预编辑文字重叠；QLineEdit 的实现检查了 preedit，无此问题。
+    """
 
     def __init__(self, readonly: bool = False, parent=None):
         super().__init__(parent)
         self.setProperty("mono", True)
         self.setFont(MONO_FONT)
         self.setReadOnly(readonly)
-        self.setPlaceholderText("在此粘贴或输入内容…" if not readonly else "结果将显示在这里")
         self.setAcceptDrops(False)
         self.setTabChangesFocus(True)
         self._full_text = ""
+        self._placeholder = ""
+        self._preedit = ""
+        self.set_placeholder("在此粘贴或输入内容…" if not readonly else "结果将显示在这里")
+
+    def set_placeholder(self, text: str) -> None:
+        self._placeholder = text
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if self._placeholder and self.document().isEmpty() and not self._preedit:
+            painter = QPainter(self.viewport())
+            painter.setFont(self.font())
+            # 用主题 fg3 作占位色：QSS repolish 对 palette PlaceholderText 的
+            # 写入时序不确定，主题色是唯一可靠来源
+            from .context import CTX
+            painter.setPen(QColor(CTX.pal().get("fg3", "#8f8f8f")))
+            # 与真实文本同起点：空文档时光标矩形即第一行文本的位置
+            cr = self.cursorRect(self.textCursor())
+            baseline = cr.y() + QFontMetrics(self.font()).ascent()
+            painter.drawText(cr.x(), baseline, self._placeholder)
+
+    def inputMethodEvent(self, event) -> None:
+        old = self._preedit
+        self._preedit = event.preeditString()
+        super().inputMethodEvent(event)
+        if old != self._preedit:
+            self.update()  # 预编辑开始 / 结束时刷新占位文本显隐
+
+    def focusOutEvent(self, event) -> None:
+        if self._preedit:
+            self._preedit = ""
+            self.update()
+        super().focusOutEvent(event)
 
     def set_result_text(self, text: str) -> None:
         """显示结果：超长时截断显示，完整内容保存在 full_text。"""
