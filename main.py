@@ -84,8 +84,9 @@ def run_selftest(log_path: str | None = None) -> int:
 
     def smart_chain():
         import base64 as _b64
+        import gzip as _gzip
         inner = "智能解码自检链路 你好"
-        payload = _b64.b64encode(_gzip if False else __import__("gzip").compress(inner.encode("utf-8"))).decode()
+        payload = _b64.b64encode(_gzip.compress(inner.encode("utf-8"))).decode()
         r = smart_decode.smart_decode(payload)
         if not r.ok or r.data.final_text != inner:
             raise RuntimeError(r.error or "chain mismatch")
@@ -246,8 +247,10 @@ def run_smoke_ui(outdir: str) -> int:
 
 
 def main(argv=None) -> int:
+    from app import APP_VERSION
+
     parser = argparse.ArgumentParser(prog="DevToolkit", description="纯离线的 Windows 编码解码工具箱")
-    parser.add_argument("--version", action="version", version="DevToolkit 1.0.0")
+    parser.add_argument("--version", action="version", version=f"DevToolkit {APP_VERSION}")
     parser.add_argument("--selftest", action="store_true", help="运行核心功能自检（打包验证用）")
     parser.add_argument("--selftest-log", help="自检结果 JSON 输出路径")
     parser.add_argument("--smoke-ui", metavar="OUTDIR", help="离屏 UI 冒烟测试并截图到指定目录")
@@ -260,7 +263,6 @@ def main(argv=None) -> int:
 
     from PySide6.QtWidgets import QApplication
 
-    from app import APP_VERSION
     from app.core.config import get_setting
     from app.ui.context import CTX
     from app.ui.main_window import MainWindow

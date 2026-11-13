@@ -139,3 +139,49 @@ def test_settings_corrupt_file_returns_defaults():
 def test_setting_helpers():
     assert config.set_setting("history_limit", 123) is True
     assert config.get_setting("history_limit") == 123
+
+
+# ---------------------------------------------------------------------------
+# 配置清洗（R1 修复回归：手改 JSON 非法值不得导致下游 int() 崩溃）
+# ---------------------------------------------------------------------------
+
+def test_config_garbage_types_fall_back_to_defaults():
+    config.set_setting("max_layers", "abc")
+    config.set_setting("decompress_cap_mb", "not-a-number")
+    config.set_setting("history_limit", None)
+    s = config.load_settings()
+    assert s["max_layers"] == 5
+    assert s["decompress_cap_mb"] == 512
+    assert s["history_limit"] == 200
+
+
+def test_config_out_of_range_values_are_clamped():
+    config.set_setting("max_layers", 999)
+    config.set_setting("decompress_cap_mb", 0)
+    config.set_setting("history_limit", 5)
+    s = config.load_settings()
+    assert s["max_layers"] == 10
+    assert s["decompress_cap_mb"] == 16
+    assert s["history_limit"] == 10
+
+
+def test_config_invalid_theme_and_flag():
+    config.set_setting("theme", "blue")
+    config.set_setting("batch_skip_empty", "yes-anything")
+    s = config.load_settings()
+    assert s["theme"] == "dark"
+    assert s["batch_skip_empty"] is True
+
+
+def test_config_save_also_sanitizes():
+    assert config.save_settings({"theme": "neon", "max_layers": "x"}) is True
+    s = config.load_settings()
+    assert s["theme"] == "dark"
+    assert s["max_layers"] == 5
+
+
+def test_config_downstream_int_never_raises():
+    """设置对话框 / 压缩页 / 智能解码页的 int(config.get_setting(...)) 不得抛异常。"""
+    for key in ("max_layers", "decompress_cap_mb", "history_limit"):
+        config.set_setting(key, "garbage-{key}")
+        int(config.get_setting(key) or (5 if key == "max_layers" else 512 if key == "decompress_cap_mb" else 200))

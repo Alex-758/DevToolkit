@@ -205,3 +205,41 @@ def test_run_never_raises_on_any_garbage():
             r1 = encoders.run(codec_id, "encode", text)
             r2 = encoders.run(codec_id, "decode", text)
             assert isinstance(r1.ok, bool) and isinstance(r2.ok, bool)
+
+
+# ---------------------------------------------------------------------------
+# Base58 / Base62 长度上限（R2 修复回归：纯 Python 大数解码 O(n²)，
+# 实测 8MB 输入小时级卡死；上限 32K 字符并给出明确错误）
+# ---------------------------------------------------------------------------
+
+def test_b58_b62_decode_over_limit_fails_fast():
+    import time
+    for cid in ("base58", "base62"):
+        t0 = time.perf_counter()
+        r = encoders.run(cid, "decode", "3" * (encoders.B58_B62_MAX_CHARS + 1))
+        elapsed = time.perf_counter() - t0
+        assert not r.ok and "过大" in r.error
+        assert elapsed < 1.0, f"{cid} over-limit decode must fail fast, took {elapsed:.2f}s"
+
+
+def test_b58_b62_encode_over_limit_fails_fast():
+    for cid in ("base58", "base62"):
+        r = encoders.run(cid, "encode", "x" * (encoders.B58_B62_MAX_CHARS + 1))
+        assert not r.ok and "过大" in r.error
+
+
+def test_b58_b62_within_limit_still_works():
+    """上限内的大输入正常编解码（Base58 输出会膨胀约 1.4 倍，样本需留余量）。"""
+    payload = "测试负载 " * 800  # 7200 字符文本，Base58 编码后约 1 万字符，低于上限
+    for cid in ("base58", "base62"):
+        enc = encoders.run(cid, "encode", payload)
+        assert enc.ok, f"{cid}: {enc.error}"
+        dec = encoders.run(cid, "decode", enc.data)
+        assert dec.ok, f"{cid}: {dec.error}"
+        assert dec.data == payload
+
+
+def test_qp_encode_no_trailing_newline():
+    """QP 编码不应给短输入附加多余换行（曾疑似 quopri 尾部换行，实测不存在）。"""
+    r = encoders.run("qp", "encode", "hello")
+    assert r.ok and r.data == "hello"

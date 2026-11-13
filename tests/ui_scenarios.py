@@ -281,6 +281,128 @@ app.processEvents()
 check("perf: 10k-line batch completes", "批量完成" in enc_page.out_header.chip_lbl.text(),
       enc_page.out_header.chip_lbl.text())
 
+# ---------------------------------------------------------------------------
+# 10. R1/R2 修复回归：压缩页方向互斥 + Hex 往返
+# ---------------------------------------------------------------------------
+comp.comp_btn.setChecked(True)
+comp._execute()
+app.processEvents()
+check("dir-group: compress direction after switching back",
+      "压缩" in comp.out_header.chip_lbl.text(), comp.out_header.chip_lbl.text())
+
+comp.in_edit.setPlainText("Hex 显示往返回归 " * 200)
+comp.b64_chk.setChecked(False)  # 用 Hex 显示
+comp._execute()
+app.processEvents()
+hex_zip = comp.out_edit.result_text().strip()
+check("compress-hex: output is pure hex",
+      len(hex_zip) > 0 and all(c in "0123456789abcdefABCDEF" for c in hex_zip))
+comp.decomp_btn.setChecked(True)
+comp.in_edit.setPlainText(hex_zip)
+comp._execute()
+app.processEvents()
+check("compress-hex: roundtrip decompress ok",
+      "解压成功" in comp.out_header.chip_lbl.text(), comp.out_header.chip_lbl.text())
+check("compress-hex: roundtrip content match",
+      comp.out_edit.result_text() == "Hex 显示往返回归 " * 200)
+
+# ---------------------------------------------------------------------------
+# 11. R1 修复回归：加密页 Hex 输出模式往返（hex 密文曾被误按 Base64 解析）
+# ---------------------------------------------------------------------------
+from PySide6.QtWidgets import QMessageBox as _QMB  # noqa: E402
+
+_QMB.information = lambda *a, **k: _QMB.StandardButton.Ok
+_QMB.warning = lambda *a, **k: _QMB.StandardButton.Ok
+
+crypto.algo_combo.setCurrentIndex(0)  # AES-256-GCM
+crypto._on_algo_change()
+crypto.enc_combo.setCurrentIndex(1)  # 密文输出 = Hex
+crypto.pass_edit.setText("scenario-hex-pass")
+crypto.in_edit.setPlainText("Hex 输出模式往返 scenario 明文")
+crypto.dir_a.setChecked(True)
+crypto._execute()
+app.processEvents()
+hex_ct = crypto.out_edit.result_text().strip()
+check("crypto-hex: output is pure hex",
+      len(hex_ct) > 0 and all(c in "0123456789abcdefABCDEF" for c in hex_ct))
+crypto.dir_b.setChecked(True)
+crypto.in_edit.setPlainText(hex_ct)
+crypto._execute()
+app.processEvents()
+check("crypto-hex: roundtrip decrypt ok",
+      "解密成功" in crypto.out_header.chip_lbl.text(), crypto.out_header.chip_lbl.text())
+check("crypto-hex: roundtrip plaintext match",
+      crypto.out_edit.result_text() == "Hex 输出模式往返 scenario 明文")
+
+# ---------------------------------------------------------------------------
+# 12. R1 修复回归：RSA 密钥后台生成（立即返回 + 完成后填充）
+# ---------------------------------------------------------------------------
+crypto.algo_combo.setCurrentIndex(5)  # RSA-PSS
+crypto._on_algo_change()
+t0 = time.time()
+crypto._gen_rsa()
+check("rsa-bg: _gen_rsa returns immediately", time.time() - t0 < 0.5)
+t0 = time.time()
+while time.time() - t0 < 30:
+    app.processEvents()
+    if "-----BEGIN" in crypto.rsa_key_edit.toPlainText():
+        break
+    time.sleep(0.03)
+check("rsa-bg: keypair filled in background", "-----BEGIN" in crypto.rsa_key_edit.toPlainText())
+check("rsa-bg: button restored", crypto.gen_btn.isEnabled() and crypto.gen_btn.text() == "生成密钥对")
+
+# ---------------------------------------------------------------------------
+# 13. R1 修复回归：哈希页文件哈希不被空文本自动重算覆盖
+# ---------------------------------------------------------------------------
+import hashlib as _hl  # noqa: E402
+
+f_hash = tmpdir / "scenario-hash.bin"
+f_hash.write_bytes(os.urandom(2048))
+hash_page = win.pages["hash"]
+hash_page.in_edit.setPlainText("这段文本哈希应被文件哈希结果替换")
+hash_page._recompute_now()
+app.processEvents()
+hash_page._start_file_hash(str(f_hash))
+t0 = time.time()
+while time.time() - t0 < 10:
+    app.processEvents()
+    if hash_page.prog_card.isHidden():
+        break
+    time.sleep(0.02)
+val_at_done = hash_page._hash_rows["sha256"][1].text()
+time.sleep(0.6)  # 越过 300ms 自动重算定时器
+app.processEvents()
+val_after = hash_page._hash_rows["sha256"][1].text()
+expected_file_hash = _hl.sha256(f_hash.read_bytes()).hexdigest()
+check("hash-file: value at completion is file hash", val_at_done == expected_file_hash,
+      f"got={val_at_done[:16]}")
+check("hash-file: not overwritten by empty-text recompute",
+      val_after == expected_file_hash and val_after != _hl.sha256(b"").hexdigest(),
+      f"after={val_after[:16]}")
+
+# ---------------------------------------------------------------------------
+# 14. R2 修复回归：IOEditor 动态换行策略（大文本 NoWrap，回落恢复 Wrap）
+# ---------------------------------------------------------------------------
+enc_page.in_edit.setPlainText("A" * (200 * 1024))
+app.processEvents()
+check("wrap: large input switches to NoWrap",
+      enc_page.in_edit.lineWrapMode() == enc_page.in_edit.LineWrapMode.NoWrap)
+enc_page.in_edit.setPlainText("short")
+app.processEvents()
+check("wrap: small input restores WidgetWidth",
+      enc_page.in_edit.lineWrapMode() == enc_page.in_edit.LineWrapMode.WidgetWidth)
+
+# b58/b62 超限在真实页面给出明确错误
+enc_page.in_edit.setPlainText("3" * 40000)
+enc_page.batch_chk.setChecked(False)  # 场景 9 开启了批量模式，先恢复单行模式
+enc_page.algo_combo.setCurrentIndex(4)  # Base58
+enc_page.dec_btn.setChecked(True)
+enc_page._execute()
+app.processEvents()
+check("b58-limit: friendly error in UI", "过大" in enc_page.out_header.chip_lbl.text(),
+      enc_page.out_header.chip_lbl.text())
+enc_page.in_edit.setPlainText("")
+
 win.close()
 
 print()

@@ -65,8 +65,8 @@ def parse_cipher_text(text: str):
         return None, "输入为空：请提供待解密 / 验签的密文"
     compact = "".join(s.split())
     force_b64 = False
-    if compact[:5].lower() == "b64:":
-        compact = compact[5:]
+    if compact[:4].lower() == "b64:":
+        compact = compact[4:]
         force_b64 = True
     # 纯十六进制串优先按 Hex 解析：hex 字符集是 Base64 字母表的子集，
     # 若先试 Base64，长度恰为 4 的倍数的 Hex 密文会被误解析成垃圾字节

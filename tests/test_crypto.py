@@ -186,3 +186,56 @@ def test_iterations_respected():
     cfg = _cfg(pbkdf2_iterations=50000)
     enc = ct.encrypt(b"iter", cfg)
     assert enc.ok and enc.meta["iterations"] == 50000
+
+
+# ---------------------------------------------------------------------------
+# 密文解析（R1 修复回归：纯十六进制串是合法 Base64 字母表的子集，
+# 先试 Base64 会把长度为 4 的倍数的 Hex 密文误解析成垃圾字节）
+# ---------------------------------------------------------------------------
+
+from app.ui.pages.crypto_page import encode_cipher_text, parse_cipher_text  # noqa: E402
+
+
+def test_parse_cipher_text_hex_multiple_of_4():
+    """Hex 密文长度恰为 4 的倍数时必须按 Hex 解析（曾误按 Base64 解析）。"""
+    cfg = {"algorithm": "aes-gcm", "key_size": 256, "key_source": "passphrase",
+           "passphrase": "test-parse-pass", "pbkdf2_iterations": 60000}
+    enc = ct.encrypt("hex parse 回归测试".encode("utf-8"), cfg)
+    assert enc.ok
+    hex_ct = encode_cipher_text(enc.data, "hex")
+    assert len(hex_ct) % 4 == 0  # 前置条件：长度确为 4 的倍数
+    parsed, err = parse_cipher_text(hex_ct)
+    assert err == ""
+    assert parsed == enc.data
+
+
+def test_parse_cipher_text_hex_odd_block():
+    parsed, err = parse_cipher_text("9f86d081884c7d65")
+    assert err == "" and parsed == bytes.fromhex("9f86d081884c7d65")
+
+
+def test_parse_cipher_text_b64_prefix_forces_base64():
+    import base64 as _b64
+    raw = b"\x01\x02\x03\x04"
+    parsed, err = parse_cipher_text("b64:" + _b64.b64encode(raw).decode())
+    assert err == "" and parsed == raw
+
+
+def test_parse_cipher_text_standard_b64():
+    import base64 as _b64
+    raw = b"anything-not-hex-chars-\xff\x00"
+    parsed, err = parse_cipher_text(_b64.b64encode(raw).decode())
+    assert err == "" and parsed == raw
+
+
+def test_parse_cipher_text_invalid_reports_error():
+    parsed, err = parse_cipher_text("!!!not-cipher!!!")
+    assert parsed is None and err != ""
+    parsed, err = parse_cipher_text("")
+    assert parsed is None and "输入为空" in err
+
+
+def test_encode_cipher_text_roundtrip():
+    data = b"\x00\x01hello " + "你好".encode("utf-8")
+    assert parse_cipher_text(encode_cipher_text(data, "base64"))[0] == data
+    assert parse_cipher_text(encode_cipher_text(data, "hex"))[0] == data
