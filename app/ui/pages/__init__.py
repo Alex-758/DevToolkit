@@ -19,7 +19,7 @@ class PageBase(QWidget):
 
     def shutdown_workers(self) -> None:
         """窗口关闭时取消本页所有后台任务。"""
-        for attr in ("runner", "worker_runner", "hash_runner", "smart_runner", "file_runner", "rsa_runner"):
+        for attr in ("runner", "worker_runner", "hash_runner", "smart_runner", "file_runner", "rsa_runner", "update_runner"):
             runner = getattr(self, attr, None)
             if runner is not None:
                 runner.shutdown()

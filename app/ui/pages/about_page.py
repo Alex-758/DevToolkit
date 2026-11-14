@@ -1,6 +1,8 @@
-"""关于软件页：版本信息、技术栈、快捷键、隐私声明。"""
+"""关于软件页：版本信息、检查更新、技术栈、快捷键、隐私声明。"""
 
 from __future__ import annotations
+
+import html
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -11,7 +13,8 @@ from PySide6.QtWidgets import (
 )
 
 from ... import APP_NAME, APP_VERSION
-from ..widgets import PageHeader, banner, make_card
+from ...core import updater
+from ..widgets import PageHeader, WorkerRunner, banner, btn, chip, make_card, set_btn_icon, set_chip
 from . import PageBase
 
 PAGE_NAME = "关于软件"
@@ -70,6 +73,20 @@ class AboutPage(PageBase):
         v.addLayout(self._kv("数据位置", r"%APPDATA%\DevToolkit\（历史、收藏与设置均为本地 JSON，可随时删除）"))
         v.addLayout(self._kv("开源许可", "MIT License · 图标为内置 SVG 线性图标"))
 
+        # ---- 检查更新：仅用户点击时联网查询一次 GitHub Releases ----
+        upd_row = QHBoxLayout()
+        upd_row.setSpacing(10)
+        self.check_btn = btn("检查更新", "refresh")
+        set_btn_icon(self.check_btn, "refresh")
+        self.check_btn.clicked.connect(self._check_update)
+        self.update_chip = chip()
+        self.update_chip.setOpenExternalLinks(True)  # 新版本下载页链接
+        upd_row.addWidget(self.check_btn)
+        upd_row.addWidget(self.update_chip, 1)
+        v.addLayout(upd_row)
+
+        self.update_runner = WorkerRunner(self._on_update_done, None, self)
+
         shortcuts_card = make_card()
         sc_v = QVBoxLayout(shortcuts_card)
         sc_v.setContentsMargins(1, 1, 1, 1)
@@ -100,9 +117,47 @@ class AboutPage(PageBase):
         root.addWidget(banner(
             "ok",
             "本软件完全离线运行：不联网、不上传、不收集任何数据，所有计算均在本地完成。"
-            "加密功能使用 PBKDF2 派生密钥（默认 210,000 次迭代），AEAD 模式防篡改。",
+            "加密功能使用 PBKDF2 派生密钥（默认 210,000 次迭代），AEAD 模式防篡改。"
+            "唯一例外是「检查更新」——仅在你点击时查询一次 GitHub Releases。",
         ))
         root.addStretch(1)
+
+    # ------------------------------------------------------------------
+    def _check_update(self):
+        if self.update_runner.busy():
+            return
+        self.check_btn.setEnabled(False)
+        self.check_btn.setText("检查中…")
+        set_chip(self.update_chip, "… 正在查询 GitHub Releases", "info")
+        self.statusMsg.emit("正在检查更新（联网查询 GitHub Releases）…")
+        self.update_runner.start(lambda _w: updater.check_update(APP_VERSION, updater.fetch_latest_release))
+
+    def _on_update_done(self, result):
+        self.check_btn.setEnabled(True)
+        self.check_btn.setText("检查更新")
+        if not result.ok:
+            set_chip(self.update_chip, f"✕ {result.error}", "err")
+            self.statusMsg.emit(f"检查更新失败：{result.error}")
+            return
+        info = result.data
+        latest = html.escape(info["latest"])
+        url = info["url"]
+        from ..context import CTX
+        accent = CTX.pal()["accent"]
+        if info["has_update"]:
+            set_chip(self.update_chip,
+                     f"✓ 发现新版本 {latest}（当前 v{APP_VERSION}） · "
+                     f'<a href="{html.escape(url)}" style="color: {accent};">前往下载页</a>', "accent")
+            self.statusMsg.emit(f"发现新版本：{info['latest']}")
+        elif info["comparable"]:
+            set_chip(self.update_chip, f"✓ 已是最新版本（v{APP_VERSION}）", "ok")
+            self.statusMsg.emit("已是最新版本")
+        else:
+            # 远端 tag 无法解析为版本号：不猜大小关系，给出链接让用户自行判断
+            set_chip(self.update_chip,
+                     f"最新版本 {latest}（与当前 v{APP_VERSION} 无法自动比较） · "
+                     f'<a href="{html.escape(url)}" style="color: {accent};">前往下载页</a>', "info")
+            self.statusMsg.emit(f"最新版本：{info['latest']}")
 
     def _kv(self, key: str, value: str) -> QHBoxLayout:
         row = QHBoxLayout()

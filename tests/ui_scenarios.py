@@ -482,6 +482,68 @@ files_page.statusMsg.disconnect(_status.append)
 files_page._file_path = ""
 files_page._run_path = ""
 
+# ---------------------------------------------------------------------------
+# 场景 18-19：关于页「检查更新」（mock 网络层，不发真实请求）
+# ---------------------------------------------------------------------------
+
+from app.core import updater as _upd  # noqa: E402
+
+about_page = win.pages["about"]
+_orig_fetch = _upd.fetch_latest_release
+
+# 场景 18：发现新版本 → chip 显示新版本号 + 下载页链接，按钮恢复
+_upd.fetch_latest_release = lambda: _R.success({
+    "tag": "v1.2.0",
+    "url": "https://github.com/Alex-758/DevToolkit/releases/tag/v1.2.0",
+    "name": "",
+})
+about_page._check_update()
+_t0 = time.time()
+while time.time() - _t0 < 3.0 and about_page.update_runner.busy():
+    app.processEvents()
+    time.sleep(0.01)
+# busy() 变 False 时 done 信号可能仍在事件队列：补泵几轮再断言
+for _ in range(5):
+    app.processEvents()
+    time.sleep(0.01)
+check("update: new version chip with download link",
+      about_page.check_btn.isEnabled()
+      and "发现新版本 v1.2.0" in about_page.update_chip.text()
+      and "https://github.com/" in about_page.update_chip.text(),
+      repr(about_page.update_chip.text()))
+
+# 场景 19：已是最新 → ok chip；网络失败 → err chip（恢复原 fetch 前先测失败）
+_upd.fetch_latest_release = lambda: _R.failure("网络不可用或查询超时，请稍后再试")
+about_page._check_update()
+_t0 = time.time()
+while time.time() - _t0 < 3.0 and about_page.update_runner.busy():
+    app.processEvents()
+    time.sleep(0.01)
+for _ in range(5):
+    app.processEvents()
+    time.sleep(0.01)
+check("update: network failure shows friendly error",
+      about_page.check_btn.isEnabled() and "网络不可用" in about_page.update_chip.text(),
+      repr(about_page.update_chip.text()))
+
+_upd.fetch_latest_release = lambda: _R.success({
+    "tag": "v1.0.0",
+    "url": "https://github.com/Alex-758/DevToolkit/releases/latest",
+    "name": "",
+})
+about_page._check_update()
+_t0 = time.time()
+while time.time() - _t0 < 3.0 and about_page.update_runner.busy():
+    app.processEvents()
+    time.sleep(0.01)
+for _ in range(5):
+    app.processEvents()
+    time.sleep(0.01)
+check("update: up-to-date chip",
+      about_page.check_btn.isEnabled() and "已是最新" in about_page.update_chip.text(),
+      repr(about_page.update_chip.text()))
+_upd.fetch_latest_release = _orig_fetch
+
 win.close()
 
 print()
