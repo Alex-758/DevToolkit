@@ -6,7 +6,7 @@ GPT / Codex 风格：统一 1.7px 圆头描边，无填充，色彩跟随主题�
 from __future__ import annotations
 
 from PySide6.QtCore import QByteArray, QRectF, Qt
-from PySide6.QtGui import QIcon, QImage, QPainter, QPixmap
+from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPainterPath, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
 # 每个图标只含路径/形状，公共属性（描边色、线宽、圆头）由外壳统一提供
@@ -84,3 +84,42 @@ def icon(name: str, color: str, size: int = 16, filled: bool = False, stroke_wid
 def clear_cache() -> None:
     """主题切换后调用：旧颜色的缓存全部失效。"""
     _cache.clear()
+
+
+# ---------------------------------------------------------------------------
+# 品牌应用图标（与 assets/icon.ico 同源）：黑色圆角方底 + 白色扳手描边。
+# 扳手路径来自 Lucide "wrench"（ISC 许可），加粗 2.4 —— 与 EXE 图标一致，
+# 窗口 / 任务栏不再用主题图标，深浅色标题栏下都成立。
+# ---------------------------------------------------------------------------
+
+_APP_ICON_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" '
+    'stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" '
+    'stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 '
+    '1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91'
+    'a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'
+)
+
+_app_icon_cache: dict = {}
+
+
+def app_icon(size: int = 32) -> QIcon:
+    """品牌应用图标（窗口 / 任务栏）。矢量渲染，4x 超采样。"""
+    if size in _app_icon_cache:
+        return _app_icon_cache[size]
+    S = size * 4
+    img = QImage(S, S, QImage.Format.Format_ARGB32)
+    img.fill(0)
+    p = QPainter(img)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    bg = QPainterPath()
+    bg.addRoundedRect(QRectF(0, 0, S, S), S * 0.22, S * 0.22)
+    p.fillPath(bg, QColor("#0d0d0d"))
+    QSvgRenderer(QByteArray(_APP_ICON_SVG.encode("utf-8"))).render(
+        p, QRectF(S * 0.19, S * 0.19, S * 0.62, S * 0.62))
+    p.end()
+    pm = QPixmap.fromImage(img)
+    pm.setDevicePixelRatio(4.0)
+    out = QIcon(pm)
+    _app_icon_cache[size] = out
+    return out

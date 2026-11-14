@@ -157,8 +157,7 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------
     def _set_window_icon(self):
-        from PySide6.QtGui import QIcon
-        self.setWindowIcon(icons.icon("encode", "#10a37f", 32, stroke_width=2.2))
+        self.setWindowIcon(icons.app_icon(32))
 
     def apply_theme(self, theme_name: str, save: bool = True):
         CTX.set_theme(theme_name)
