@@ -46,6 +46,14 @@ class AboutPage(PageBase):
         v.setContentsMargins(18, 16, 18, 16)
         v.setSpacing(14)
 
+        # ---- 检查更新：仅用户点击时联网查询一次 GitHub Releases ----
+        self.check_btn = btn("检查更新", "refresh")
+        set_btn_icon(self.check_btn, "refresh")
+        self.check_btn.clicked.connect(self._check_update)
+        self.update_chip = chip()
+        self.update_chip.setOpenExternalLinks(True)  # 新版本下载页链接
+        self.update_runner = WorkerRunner(self._on_update_done, None, self)
+
         head_row = QHBoxLayout()
         head_row.setSpacing(12)
         logo = QLabel("DT")
@@ -63,29 +71,29 @@ class AboutPage(PageBase):
         sub_lbl = QLabel("面向开发者与日常技术人员的多功能编码解码工具箱 · 编码 / 加密 / 压缩 / 哈希 / 智能解码")
         sub_lbl.setObjectName("dtSub")
         sub_lbl.setWordWrap(True)
-        title_col.addWidget(name_lbl)
+        # 版本号后紧跟小型「检查更新」按钮；addStretch 防止按钮被拉伸填满整行
+        title_row = QHBoxLayout()
+        title_row.setSpacing(12)
+        title_row.addWidget(name_lbl)
+        title_row.addWidget(self.check_btn)
+        title_row.addStretch(1)
+        title_col.addLayout(title_row)
         title_col.addWidget(sub_lbl)
         head_row.addLayout(title_col)
         head_row.addStretch(1)
+
         v.addLayout(head_row)
 
         v.addLayout(self._kv("技术栈", " · ".join(TECH_STACK)))
         v.addLayout(self._kv("数据位置", r"%APPDATA%\DevToolkit\（历史、收藏与设置均为本地 JSON，可随时删除）"))
         v.addLayout(self._kv("开源许可", "MIT License · 图标为内置 SVG 线性图标"))
 
-        # ---- 检查更新：仅用户点击时联网查询一次 GitHub Releases ----
+        # 检查结果 chip：独立一行，仅在查询后出现（addStretch 防止撑满整行）
         upd_row = QHBoxLayout()
         upd_row.setSpacing(10)
-        self.check_btn = btn("检查更新", "refresh")
-        set_btn_icon(self.check_btn, "refresh")
-        self.check_btn.clicked.connect(self._check_update)
-        self.update_chip = chip()
-        self.update_chip.setOpenExternalLinks(True)  # 新版本下载页链接
-        upd_row.addWidget(self.check_btn)
-        upd_row.addWidget(self.update_chip, 1)
+        upd_row.addWidget(self.update_chip)
+        upd_row.addStretch(1)
         v.addLayout(upd_row)
-
-        self.update_runner = WorkerRunner(self._on_update_done, None, self)
 
         shortcuts_card = make_card()
         sc_v = QVBoxLayout(shortcuts_card)
