@@ -170,6 +170,27 @@ QPlainTextEdit {{ padding: 8px 10px; }}
 QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QSpinBox:focus {{
     border-color: {accent};
 }}
+/* 自绘上下按钮：不定制会露出 Windows 原生 ▲▼，与应用风格割裂 */
+QSpinBox::up-button, QSpinBox::down-button {{
+    subcontrol-origin: border;
+    width: 20px;
+    border: none;
+    background: transparent;
+}}
+QSpinBox::up-button {{ subcontrol-position: top right; }}
+QSpinBox::down-button {{ subcontrol-position: bottom right; }}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {{ background: {hover}; }}
+QSpinBox::up-button:pressed, QSpinBox::down-button:pressed {{ background: {border}; }}
+QSpinBox::up-arrow {{
+    image: url("{arrow_up}");
+    width: 12px;
+    height: 8px;
+}}
+QSpinBox::down-arrow {{
+    image: url("{arrow_down}");
+    width: 12px;
+    height: 8px;
+}}
 QLineEdit:disabled, QPlainTextEdit:disabled {{ color: {fg3}; }}
 QLineEdit[mono="true"], QPlainTextEdit[mono="true"] {{
     font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
@@ -188,11 +209,12 @@ QComboBox:hover {{ border-color: {border_strong}; }}
 QComboBox:focus {{ border-color: {accent}; }}
 QComboBox::drop-down {{ border: none; width: 24px; }}
 QComboBox::down-arrow {{
-    image: none;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-top: 5px solid {fg3};
-    margin-right: 8px;
+    /* Qt QSS 不支持 CSS border 三角技巧（border 画成矩形块），
+    箭头必须用主题色 PNG（见 _arrow_image） */
+    image: url("{arrow_down}");
+    width: 12px;
+    height: 8px;
+    margin-right: 6px;
 }}
 QComboBox QAbstractItemView {{
     background: {menu};
@@ -328,5 +350,58 @@ QSplitter::handle {{ background: {border}; width: 1px; }}
 """
 
 
+# ---------------------------------------------------------------------------
+# 主题色箭头图片：Qt QSS 不支持 CSS 的 border 三角技巧（border 会被画成
+# 矩形块，实测下拉 / 步进箭头渲染为实心方块），子控件箭头必须用真实
+# 图片文件。按主题 fg3 色生成小三角 PNG 缓存在数据目录，随主题换色。
+# ---------------------------------------------------------------------------
+
+_arrow_cache: Dict[str, str] = {}
+
+
+def _arrow_image(theme: str, direction: str) -> str:
+    """生成（或复用缓存）主题色小三角箭头 PNG，返回 QSS url 路径。"""
+    key = (theme, direction)
+    if key in _arrow_cache:
+        return _arrow_cache[key]
+    color = palette(theme)["fg3"].lstrip("#")
+    from ..core.config import get_data_dir
+    path = get_data_dir() / "cache" / f"arrow-{direction}-{color}.png"
+    if not path.exists():
+        try:
+            from PySide6.QtCore import QByteArray, QRectF, Qt
+            from PySide6.QtGui import QPainter, QPixmap
+            from PySide6.QtSvg import QSvgRenderer
+
+            # viewBox 12x8：向下 / 向上的实心小三角
+            if direction == "down":
+                d = "M1 2 L11 2 L6 7 Z"
+            elif direction == "up":
+                d = "M1 6 L11 6 L6 1 Z"
+            else:
+                return ""
+            svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 8">'
+                   f'<path d="{d}" fill="#{color}"/></svg>')
+            ss = 4
+            pm = QPixmap(12 * ss, 8 * ss)
+            pm.fill(Qt.GlobalColor.transparent)
+            p = QPainter(pm)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            QSvgRenderer(QByteArray(svg.encode("utf-8"))).render(
+                p, QRectF(0, 0, 12 * ss, 8 * ss))
+            p.end()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if not pm.save(str(path)):
+                return ""  # 图片不可用时 QSS 规则降级为无箭头，不影响功能
+        except Exception:
+            return ""
+    result = path.as_posix()
+    _arrow_cache[key] = result
+    return result
+
+
 def build_qss(theme: str) -> str:
-    return QSS_TEMPLATE.format(**palette(theme))
+    args = dict(palette(theme))
+    args["arrow_down"] = _arrow_image(theme, "down")
+    args["arrow_up"] = _arrow_image(theme, "up")
+    return QSS_TEMPLATE.format(**args)

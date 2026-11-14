@@ -76,6 +76,11 @@ class SettingsDialog(QDialog):
         v.addWidget(note)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        ok_btn.setText("确定")
+        # 主操作强调：与全应用按钮层级一致（否则确定/取消同权重，且默认英文）
+        ok_btn.setProperty("variant", "primary")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         v.addWidget(buttons)
@@ -87,9 +92,13 @@ class SettingsDialog(QDialog):
             self.on_theme_change(theme_name)
 
     def _clear_history(self):
-        confirm = QMessageBox.question(self, "清空历史记录", "确定要清空全部历史记录吗？此操作不可恢复。",
-                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if confirm == QMessageBox.StandardButton.Yes:
+        box = QMessageBox(self)
+        box.setWindowTitle("清空历史记录")
+        box.setText("确定要清空全部历史记录吗？此操作不可恢复。")
+        clear_btn = box.addButton("清空", QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton("取消", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        if box.clickedButton() is clear_btn:
             history.clear_entries()
             self.status_msg = "历史记录已清空"
 
