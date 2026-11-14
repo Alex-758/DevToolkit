@@ -110,3 +110,29 @@ def test_try_auto_decompress():
     assert r.ok and r.data == b"fallback zlib"
     r2 = cp.try_auto_decompress(b"plain text not compressed")
     assert not r2.ok
+
+
+# ---------------------------------------------------------------------------
+# LZ4 边界（R4 修复回归：空帧曾误报「不是有效的 LZ4 数据」，截断流曾静默
+# 返回部分解压结果——现与 Brotli 的完整性校验对齐）
+# ---------------------------------------------------------------------------
+
+def test_lz4_empty_frame_roundtrip():
+    import lz4.frame
+    r = cp.decompress(lz4.frame.compress(b""), "lz4")
+    assert r.ok and r.data == b"", r.error
+
+
+def test_lz4_truncated_stream_fails_cleanly():
+    import lz4.frame
+    big = lz4.frame.compress(b"A" * 100_000)
+    trunc = big[: int(len(big) * 0.9)]  # 掐掉尾部 10%：帧不完整
+    r = cp.decompress(trunc, "lz4")
+    assert not r.ok and "不完整" in r.error
+
+
+def test_lz4_garbage_fails_cleanly():
+    r = cp.decompress(b"not-lz4-at-all-garbage!", "lz4")
+    assert not r.ok
+    r2 = cp.decompress(b"\x00" * 32, "lz4")
+    assert not r2.ok

@@ -68,7 +68,17 @@ class Worker(QThread):
 
 
 class WorkerRunner(QObject):
-    """管理页面的后台任务：自动取消上一次未完成任务、忽略过期结果。"""
+    """管理页面的后台任务：新任务自动取代旧任务、过期结果不送达回调。
+
+    竞态约束（实测旧实现会崩）：done 信号按 worker 身份配对清理。
+    旧任务的 done 若在新任务启动后才送达，绝不能触碰当前正在运行的
+    Worker（deleteLater 运行中的 QThread 会触发
+    "QThread: Destroyed while thread is still running" 并可能崩溃）。
+
+    语义：stop() 只请求协作取消，其终止结果仍会送达回调（通常为
+    「已取消」失败）——页面依赖该回调恢复按钮 / 进度条等 UI 状态。
+    只有 start()（发起新任务）才使旧结果过期。
+    """
 
     def __init__(self, on_done, on_progress=None, parent=None):
         super().__init__(parent)
@@ -79,18 +89,18 @@ class WorkerRunner(QObject):
 
     def start(self, fn) -> None:
         self.stop()
-        self._generation += 1
+        self._generation += 1  # 使被取代任务的在途结果过期
         gen = self._generation
         worker = Worker(fn, self)
         worker.progress.connect(self._on_progress)
-        worker.done.connect(lambda res: self._on_done(res, gen))
+        worker.done.connect(lambda res, wk=worker, g=gen: self._on_done(res, wk, g))
         self._worker = worker
         worker.start()
 
     def stop(self) -> None:
+        """请求协作取消当前任务；其终止结果仍会送达回调。"""
         if self._worker is not None and self._worker.isRunning():
             self._worker.cancel()
-        self._generation += 1  # 使在途结果过期
 
     def busy(self) -> bool:
         return self._worker is not None and self._worker.isRunning()
@@ -105,13 +115,16 @@ class WorkerRunner(QObject):
         if self.on_progress:
             self.on_progress(done, total)
 
-    def _on_done(self, res, gen: int) -> None:
-        if self._worker is not None:
-            self._worker.wait(50)
-            self._worker.deleteLater()
-            self._worker = None
+    def _on_done(self, res, worker, gen: int) -> None:
+        # 只回收发出本次信号的 worker；被新任务取代的旧 worker 绝不
+        # 触碰当前 _worker（旧实现曾 deleteLater 正在运行的新线程）
+        worker.wait(50)
+        worker.deleteLater()
+        if worker is not self._worker:
+            return  # 过期 Worker：当前任务另有其人
+        self._worker = None
         if gen != self._generation:
-            return  # 过期结果：用户已发起新任务或页面已重置
+            return  # 过期结果：新任务已发起
         self.on_done(res)
 
 

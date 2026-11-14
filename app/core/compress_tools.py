@@ -204,8 +204,10 @@ def _guarded_lz4(data: bytes, cap: int) -> bytes:
         pos += chunk_size
         if dec.eof:
             break
-    if not out:
-        raise ValueError("不是有效的 LZ4 数据")
+    # 与 Brotli 的 is_finished 校验对齐：截断的 LZ4 流若不报错，会把
+    # 部分解压结果当成功返回（数据正确性问题）；合法空帧 eof=True 不受影响
+    if not dec.eof:
+        raise ValueError("LZ4 流不完整或已损坏")
     return bytes(out)
 
 

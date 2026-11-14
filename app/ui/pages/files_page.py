@@ -134,6 +134,7 @@ class FilesPage(PageBase):
         root.addStretch(1)
 
         self._file_path = ""
+        self._run_path = ""   # 本次任务锁定的文件路径（运行中换文件不影响结果与历史）
         self._binary_out = None
         self.file_runner = WorkerRunner(self._on_done, self._on_progress, self)
         QShortcut(QKeySequence("Ctrl+Return"), self, self._run)
@@ -157,7 +158,8 @@ class FilesPage(PageBase):
         self.file_card.show()
         self.file_header.title_lbl.setText(Path(path).name)
         self.file_header.set_meta(f"{size:,} 字节（{size / 1024:.1f} KB）")
-        self.run_btn.setEnabled(True)
+        # 有任务在跑时保持禁用：按钮由任务完成回调统一恢复
+        self.run_btn.setEnabled(not self.file_runner.busy())
         self.out_edit.set_result_text("")
         self._binary_out = None
         set_chip(self.out_header.chip_lbl, "", "")
@@ -174,22 +176,26 @@ class FilesPage(PageBase):
         if not self._file_path:
             self.statusMsg.emit("请先选择文件")
             return
+        if self.file_runner.busy():
+            # Ctrl+Return 快捷键不经过按钮禁用态；任务运行中不允许再起任务
+            self.statusMsg.emit("已有任务正在处理，请等待完成或点击「取消」")
+            return
         op = self.op_combo.currentData()
+        self._run_path = self._file_path  # 锁定路径：运行中载入新文件不影响本任务
         self.run_btn.setEnabled(False)
         self.prog_card.show()
         self.prog_bar.setValue(0)
-        self.prog_lbl.setText(f"正在处理：{Path(self._file_path).name}（后台线程，界面不卡顿）")
+        self.prog_lbl.setText(f"正在处理：{Path(self._run_path).name}（后台线程，界面不卡顿）")
 
         def job(worker):
-            return self._do_process(op, worker)
+            return self._do_process(op, worker, self._run_path)
 
         self.file_runner.start(job)
 
-    def _do_process(self, op: str, worker):
+    def _do_process(self, op: str, worker, path: str):
         import time as _time
 
         t0 = _time.perf_counter()
-        path = self._file_path
         try:
             data = Path(path).read_bytes()
         except OSError as exc:
@@ -281,7 +287,7 @@ class FilesPage(PageBase):
             )
             self.out_edit._full_text = ""
         set_chip(self.out_header.chip_lbl, f"✓ {payload['meta']} · {payload['ms']} 毫秒", "ok")
-        self.historyAdd.emit(PAGE_NAME, payload["meta"], Path(self._file_path).name if self._file_path else "")
+        self.historyAdd.emit(PAGE_NAME, payload["meta"], Path(self._run_path).name if self._run_path else "")
         self.statusMsg.emit(f"处理完成 · {payload['ms']} 毫秒")
 
     def _cancel(self):

@@ -403,6 +403,85 @@ check("b58-limit: friendly error in UI", "过大" in enc_page.out_header.chip_lb
       enc_page.out_header.chip_lbl.text())
 enc_page.in_edit.setPlainText("")
 
+# ---------------------------------------------------------------------------
+# 场景 15-17：WorkerRunner 竞态 / 取消回调 / 文件页 busy 保护（R4 回归）
+# ---------------------------------------------------------------------------
+
+from app.core.results import Result as _R  # noqa: E402
+from app.ui.widgets import WorkerRunner as _WR  # noqa: E402
+
+# 场景 15：旧任务 done 晚到不得破坏新任务（旧实现会 deleteLater 运行中的
+# 新 Worker，触发 "QThread: Destroyed while thread is still running" 并崩溃）
+_arrived = []
+_rr = _WR(lambda r: _arrived.append(r.data), None, None)
+
+
+def _job_a(_w):  # 忽略取消：跑到完成，制造「过期 done 在新任务运行期间送达」
+    time.sleep(0.4)
+    return _R.success("A")
+
+
+def _job_b(_w):
+    time.sleep(0.4)
+    return _R.success("B")
+
+
+_rr.start(_job_a)
+_t0 = time.time()
+_rr.start(_job_b)  # 立即取代 A；A 的 done 将在 B 运行期间送达
+while time.time() - _t0 < 2.0 and not _arrived:
+    app.processEvents()
+    time.sleep(0.01)
+check("runner: stale done does not destroy current worker",
+      _arrived == ["B"] and not _rr.busy(), repr(_arrived))
+
+# 场景 16：stop() 取消后终止结果仍送达回调（页面恢复 UI 的唯一依赖；
+# 旧实现 generation 抑制回调导致进度卡永不隐藏、按钮永久禁用）
+_arrived2 = []
+_rr2 = _WR(lambda r: _arrived2.append((r.ok, r.error)), None, None)
+
+
+def _job_c(w):  # 协作取消：每 20ms 检查一次
+    for _ in range(40):
+        if w.is_cancelled():
+            return _R.failure("已取消")
+        time.sleep(0.02)
+    return _R.success("C")
+
+
+_rr2.start(_job_c)
+_t0 = time.time()
+while time.time() - _t0 < 0.3:
+    app.processEvents()
+    time.sleep(0.01)
+_rr2.stop()
+while time.time() - _t0 < 3.0 and not _arrived2:
+    app.processEvents()
+    time.sleep(0.01)
+check("runner: cancel still delivers callback",
+      _arrived2 == [(False, "已取消")], repr(_arrived2))
+
+# 场景 17：文件页任务运行中禁止再次启动（Ctrl+Return 快捷键绕过禁用按钮）
+files_page = win.pages["files"]
+files_page._file_path = "scenario-guard-path"  # 守卫不读文件，路径仅需非空
+files_page.file_runner.start(
+    lambda _w: (time.sleep(0.6), _R.success(
+        {"kind": "text", "text": "", "meta": "guard", "binary": None, "ms": 1}))[1]
+)
+app.processEvents()
+_status = []
+files_page.statusMsg.connect(_status.append)
+files_page._run()  # busy → 必须被拒绝
+check("files: busy guard rejects second run",
+      bool(_status) and "已有任务" in _status[-1], repr(_status[-1:]))
+_t0 = time.time()
+while time.time() - _t0 < 3.0 and files_page.file_runner.busy():
+    app.processEvents()
+    time.sleep(0.01)
+files_page.statusMsg.disconnect(_status.append)
+files_page._file_path = ""
+files_page._run_path = ""
+
 win.close()
 
 print()
