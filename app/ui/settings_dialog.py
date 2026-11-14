@@ -32,6 +32,10 @@ class SettingsDialog(QDialog):
 
         form = QFormLayout()
         form.setSpacing(10)
+        # 标签右对齐：标签列被最长标签撑宽，左对齐会让短标签离字段很远，
+        # 长短行的「标签→字段」间距不一致；右对齐后所有标签紧贴各自字段
+        from PySide6.QtCore import Qt
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         self.theme_combo = QComboBox()
         self.theme_combo.addItem("深色（默认）", "dark")
@@ -81,6 +85,8 @@ class SettingsDialog(QDialog):
         # 主操作强调：与全应用按钮层级一致（否则确定/取消同权重，且默认英文）
         ok_btn.setProperty("variant", "primary")
         buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
+        # 内部布局默认带边距：按钮右缘会缩进于字段列右缘，视觉上不对齐
+        buttons.layout().setContentsMargins(0, 0, 0, 0)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         v.addWidget(buttons)

@@ -134,7 +134,8 @@ QPushButton[variant="primary"] {{
     border: 1px solid {accent};
     color: {accent_fg};
     font-weight: 600;
-    padding: 5px 18px;
+    /* 垂直 padding 与普通按钮一致：主按钮不得比普通按钮高（对话框成对按钮高度不等） */
+    padding: 4px 18px;
 }}
 QPushButton[variant="primary"]:hover {{ background: {accent_hover}; border-color: {accent_hover}; }}
 QPushButton[variant="primary"]:pressed {{ background: {accent_hover}; }}
@@ -170,28 +171,35 @@ QPlainTextEdit {{ padding: 8px 10px; }}
 QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QSpinBox:focus {{
     border-color: {accent};
 }}
-/* 自绘上下按钮：不定制会露出 Windows 原生 ▲▼，与应用风格割裂 */
+/* 自绘上下按钮：不定制会露出 Windows 原生 ▲▼，与应用风格割裂。
+   按钮宽 24px + 箭头 margin-right 6px，与 QComboBox 箭头横向位置一致 */
 QSpinBox::up-button, QSpinBox::down-button {{
     subcontrol-origin: border;
-    width: 20px;
+    width: 24px;
     border: none;
     background: transparent;
 }}
-QSpinBox::up-button {{ subcontrol-position: top right; }}
-QSpinBox::down-button {{ subcontrol-position: bottom right; }}
+QSpinBox::up-button {{ subcontrol-position: top right; height: 11px; }}
+QSpinBox::down-button {{ subcontrol-position: bottom right; height: 11px; }}
 QSpinBox::up-button:hover, QSpinBox::down-button:hover {{ background: {hover}; }}
 QSpinBox::up-button:pressed, QSpinBox::down-button:pressed {{ background: {border}; }}
 QSpinBox::up-arrow {{
     image: url("{arrow_up}");
     width: 12px;
     height: 8px;
+    margin-right: 6px;
 }}
 QSpinBox::down-arrow {{
     image: url("{arrow_down}");
     width: 12px;
     height: 8px;
+    margin-right: 6px;
 }}
 QLineEdit:disabled, QPlainTextEdit:disabled {{ color: {fg3}; }}
+/* 与 QComboBox（min-height 22 → 总高 32）对齐。注意 Qt 对 QSpinBox 的
+   QSS min-height 有 +4px 非线性加成：min-height 22 实测总高 36 而非 32，
+   18 恰好等于 combo 的内容高（实测二分确定） */
+QSpinBox {{ min-height: 18px; }}
 QLineEdit[mono="true"], QPlainTextEdit[mono="true"] {{
     font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
     font-size: 12.5px;
