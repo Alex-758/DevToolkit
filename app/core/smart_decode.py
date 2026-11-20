@@ -118,13 +118,20 @@ def _try_string_decoders(text: str) -> Optional[Tuple[str, str, object]]:
     return None
 
 
-def _try_decompress(data: bytes, cap_mb: int) -> Optional[Tuple[str, bytes]]:
-    """若字节含压缩魔数则尝试解压，返回 (动作名, 解压结果 bytes)。"""
+def _try_decompress(data: bytes, cap_mb: int) -> Optional[Tuple[str, object]]:
+    """若字节含压缩魔数则尝试解压。
+
+    返回 (动作名, 解压结果 bytes)；不可解压返回 None；
+    触发压缩炸弹防护返回 ("bomb", 错误信息)（R5 B13：旧实现把超限
+    终止当成「不可解压」吞掉，用户看到的是误导性的「未识别特征」）。
+    """
     fmt = compress_tools.sniff(data)
     if fmt is None:
         return None
     result = compress_tools.decompress(data, fmt, cap_mb)
     if not result.ok:
+        if result.error_detail == "cap_exceeded":
+            return ("bomb", result.error)
         return None
     return (f"{COMPRESS_NAMES.get(fmt, fmt)} 解压", result.data)
 
@@ -158,6 +165,9 @@ def smart_decode(text: str, max_layers: int = DEFAULT_LAYERS, cap_mb: int = 512)
                 before_size = f"{len(before):,} 字符"
                 after_size = f"{len(decoded):,} 字节"
                 comp = _try_decompress(decoded, cap_mb)
+                if isinstance(comp, tuple) and comp[0] == "bomb":
+                    # 超限终止如实上报（R5 B13）：不与「格式无效」混淆
+                    return Result.failure(comp[1], "压缩炸弹防护终止：已保留原始输入")
                 if comp is not None:
                     steps.append(Step(
                         index=len(steps) + 1, action=action,
@@ -211,6 +221,8 @@ def smart_decode(text: str, max_layers: int = DEFAULT_LAYERS, cap_mb: int = 512)
         else:
             # bytes：尝试解压或转文本
             comp = _try_decompress(current, cap_mb)
+            if isinstance(comp, tuple) and comp[0] == "bomb":
+                return Result.failure(comp[1], "压缩炸弹防护终止：已保留原始输入")
             if comp is not None:
                 comp_action, comp_data = comp
                 steps.append(Step(

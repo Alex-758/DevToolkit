@@ -39,6 +39,16 @@ def _new(algo: str) -> "hashlib._Hash":
     return hashlib.new(algo)
 
 
+def _utf8_or_fail(text: str) -> bytes:
+    """UTF-8 编码；孤立代理等无法编码的字符转为明确的 ValueError（R5 B4）。"""
+    try:
+        return text.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ValueError(
+            "输入包含无法编码为 UTF-8 的字符（如孤立代理字符），请检查输入内容"
+        ) from exc
+
+
 def text_hash(text: str, algo: str) -> Result:
     """计算文本（UTF-8 字节）的单个哈希。"""
     if text is None:
@@ -47,7 +57,10 @@ def text_hash(text: str, algo: str) -> Result:
         return Result.failure(f"未知哈希算法：{algo}")
     if len(text) > MAX_TEXT_CHARS:
         return Result.failure(f"输入过大（超过 8 MB），请使用文件哈希")
-    data = text.encode("utf-8")
+    try:
+        data = _utf8_or_fail(text)
+    except ValueError as exc:
+        return Result.failure(str(exc))
     h = _new(algo)
     h.update(data)
     digest = h.hexdigest()
@@ -61,7 +74,10 @@ def text_hash_all(text: str, algos: Optional[List[str]] = None) -> Result:
     if len(text) > MAX_TEXT_CHARS:
         return Result.failure(f"输入过大（超过 8 MB），请使用文件哈希")
     algos = algos or ALGO_IDS
-    data = text.encode("utf-8")
+    try:
+        data = _utf8_or_fail(text)
+    except ValueError as exc:
+        return Result.failure(str(exc))
     out: Dict[str, str] = {}
     for algo in algos:
         if algo not in ALGO_IDS:

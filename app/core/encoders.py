@@ -741,9 +741,16 @@ def _ascii_decode(text: str, params: dict) -> Result:
     tokens = [t for t in re.split(r"[\s,]+", s) if t]
     out = []
     for t in tokens:
-        try:
-            v = int(t, 16) if t.lower().startswith("0x") else int(t, 10)
-        except ValueError:
+        # 严格词法校验（R5 B10）：int() 的宽松解析会接受 "1_0"（下划线
+        # 分隔符）、全角 / 阿拉伯-印度数字、"＋1"，产出意外的控制字符
+        if t[:2].lower() == "0x":
+            body = t[2:]
+            if not body or not re.fullmatch(r"[0-9a-fA-F]+", body):
+                return Result.failure(f"「{t}」不是有效的十六进制码点数值")
+            v = int(body, 16)
+        elif re.fullmatch(r"[0-9]+", t):
+            v = int(t, 10)
+        else:
             return Result.failure(f"「{t}」不是有效的十进制 / 十六进制码点数值")
         if not 0 <= v <= 127:
             return Result.failure(f"「{t}」超出 ASCII 范围（0–127）")

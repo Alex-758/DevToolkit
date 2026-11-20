@@ -136,3 +136,65 @@ def test_lz4_garbage_fails_cleanly():
     assert not r.ok
     r2 = cp.decompress(b"\x00" * 32, "lz4")
     assert not r2.ok
+
+
+# ---------------------------------------------------------------------------
+# R5 回归修复：截断流完整性校验（B2）/ 多成员拼接（B3）/ 炸弹信号透传（B7）
+# ---------------------------------------------------------------------------
+
+def test_truncated_gzip_rejected():
+    payload = b"truncation integrity check " * 20
+    blob = gzip.compress(payload)
+    assert not cp.decompress(blob[:-10], "gzip", 16).ok
+    # 只去掉 CRC/ISIZE 尾部同样必须拒绝（完整性校验不可跳过）
+    assert not cp.decompress(blob[:-8], "gzip", 16).ok
+
+
+def test_truncated_zlib_rejected():
+    blob = zlib.compress(b"zlib truncation check " * 20)
+    assert not cp.decompress(blob[:-6], "zlib", 16).ok
+    assert not cp.decompress(blob[:-4], "zlib", 16).ok
+
+
+def test_truncated_deflate_rejected():
+    co = zlib.compressobj(6, zlib.DEFLATED, -15)
+    blob = co.compress(b"deflate truncation check " * 20) + co.flush()
+    assert not cp.decompress(blob[:-5], "deflate", 16).ok
+
+
+def test_roundtrip_still_works_after_eof_check():
+    payload = ("integrity roundtrip 你好 😀 ".encode("utf-8")) * 40
+    for name, blob in (("gzip", gzip.compress(payload)), ("zlib", zlib.compress(payload))):
+        r = cp.decompress(blob, name, 16)
+        assert r.ok and r.data == payload, (name, r.error)
+
+
+def test_concatenated_gzip_all_members():
+    """B3：cat a.gz b.gz 的多成员流不得静默丢弃后续成员。"""
+    a = gzip.compress(b"first member ")
+    b = gzip.compress(b"SECOND MEMBER PRESERVED")
+    r = cp.decompress(a + b, "gzip", 16)
+    assert r.ok and r.data == b"first member SECOND MEMBER PRESERVED", r.error
+
+
+def test_concatenated_zlib_all_members():
+    a = zlib.compress(b"AAA ")
+    b = zlib.compress(b"BBB")
+    r = cp.decompress(a + b, "zlib", 16)
+    assert r.ok and r.data == b"AAA BBB", r.error
+
+
+def test_gzip_trailing_garbage_ignored():
+    """eof 后的非成员余料按 gunzip「trailing garbage ignored」惯例忽略。"""
+    blob = gzip.compress(b"payload") + b"\x00" * 16 + b"trailing junk"
+    r = cp.decompress(blob, "gzip", 16)
+    assert r.ok and r.data == b"payload", r.error
+
+
+def test_try_auto_decompress_reports_bomb():
+    """B7：超限终止必须如实报告，不得吞成「格式无效」。"""
+    bomb = zlib.compress(b"\x00" * (64 * 1024 * 1024), 9)
+    r = cp.try_auto_decompress(bomb, 16)
+    assert not r.ok and "上限" in r.error
+    r2 = cp.try_auto_decompress(b"plain text not compressed")
+    assert not r2.ok and "不是有效的" in r2.error

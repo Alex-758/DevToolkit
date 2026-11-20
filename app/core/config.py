@@ -2,10 +2,60 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import time
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Iterator
+
+
+@contextlib.contextmanager
+def cross_process_lock(target_path, timeout_s: float = 5.0) -> Iterator[None]:
+    """跨进程互斥锁（Windows msvcrt 字节锁）：保护「读-改-写」序列。
+
+    R5 修复（B6）：多实例并发时读-改-写会互相覆盖（实测两进程各写 100 条
+    历史只剩 17 条）。锁文件为 <target>.lock；超时或锁文件不可用时退化为
+    无锁 —— 单次写入仍是原子替换，最坏情况回到旧行为（丢一次更新），
+    绝不卡死 UI。线程内并发由 history 层自身的 threading.Lock 保护。
+    """
+    try:
+        import msvcrt
+    except ImportError:
+        yield  # 非 Windows 平台无字节锁可用（本应用面向 Windows）
+        return
+    fh = None
+    locked = False
+    try:
+        try:
+            fh = open(Path(str(target_path) + ".lock"), "a+b")
+        except OSError:
+            yield
+            return
+        deadline = time.monotonic() + timeout_s
+        while True:
+            try:
+                fh.seek(0)
+                msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+                locked = True
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(0.02)
+        yield
+    finally:
+        if fh is not None:
+            if locked:
+                try:
+                    fh.seek(0)
+                    msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+                except OSError:
+                    pass
+            try:
+                fh.close()
+            except OSError:
+                pass
 
 DEFAULT_SETTINGS: Dict[str, Any] = {
     "theme": "dark",            # dark / light
@@ -101,6 +151,8 @@ def get_setting(key: str) -> Any:
 
 
 def set_setting(key: str, value: Any) -> bool:
-    settings = load_settings()
-    settings[key] = value
-    return save_settings(settings)
+    # 读-改-写序列：跨进程加锁防止多实例互相覆盖（R5 B6）
+    with cross_process_lock(get_settings_path()):
+        settings = load_settings()
+        settings[key] = value
+        return save_settings(settings)

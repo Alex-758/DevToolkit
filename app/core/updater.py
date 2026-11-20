@@ -83,6 +83,12 @@ def check_update(current: str, fetch=None) -> Result:
     latest_t = _version_tuple(info["tag"])
     cur_t = _version_tuple(current)
     comparable = latest_t is not None and cur_t is not None
+    if comparable:
+        # 段数补零对齐（R5 B11）：元组直接比较时 (1,2) < (1,2,0)，
+        # 会把 tag v1.2 vs 当前 1.2.0 误判为无更新、1.2 vs v1.2.0 误报更新
+        n = max(len(latest_t), len(cur_t))
+        latest_t = latest_t + (0,) * (n - len(latest_t))
+        cur_t = cur_t + (0,) * (n - len(cur_t))
     has_update = bool(comparable and latest_t > cur_t)
     return Result.success(
         {

@@ -245,7 +245,11 @@ check("batch decode per line", enc_page.out_edit.result_text() == "1  line-a\n2 
 
 enc_page._swap()
 app.processEvents()
-check("swap: output to input", enc_page.in_edit.toPlainText().startswith("1  line-a"))
+# R5 B8 修复后：批量模式下交换回的是纯逐行结果（不带行号前缀），
+# 再次执行可正确 roundtrip（旧行为把「1  line-a」连行号一起换入）
+check("swap: output to input (plain rows, no index)",
+      enc_page.in_edit.toPlainText() == "line-a\nline-b\nline-c",
+      repr(enc_page.in_edit.toPlainText()))
 
 enc_page._toggle_fav()
 from app.core import history as hist_mod  # noqa: E402
@@ -543,6 +547,31 @@ check("update: up-to-date chip",
       about_page.check_btn.isEnabled() and "已是最新" in about_page.update_chip.text(),
       repr(about_page.update_chip.text()))
 _upd.fetch_latest_release = _orig_fetch
+
+# ---------------------------------------------------------------------------
+# 20. 编码页：批量模式交换语义（R5 B8 回归：交换回的是纯逐行结果，不带行号）
+# ---------------------------------------------------------------------------
+enc_page.batch_chk.setChecked(True)
+enc_page.algo_combo.setCurrentIndex(enc_page.algo_combo.findData("base64"))
+enc_page.dec_btn.setChecked(True)
+enc_page.in_edit.setPlainText("aGVsbG8=\naGVsbG8=")
+enc_page._execute()
+_t0 = time.time()
+while time.time() - _t0 < 15 and not enc_page.exec_btn.isEnabled():
+    app.processEvents()
+    time.sleep(0.02)
+for _ in range(3):
+    app.processEvents()
+    time.sleep(0.01)
+enc_page._swap()
+check("encode batch: swap fills plain outputs without row indexes",
+      enc_page.in_edit.toPlainText() == "hello\nhello"
+      and enc_page.out_edit.result_text() == "aGVsbG8=\naGVsbG8=",
+      f"in={enc_page.in_edit.toPlainText()!r} out={enc_page.out_edit.result_text()!r}")
+enc_page.batch_chk.setChecked(False)
+enc_page.enc_btn.setChecked(True)
+enc_page.in_edit.setPlainText("")
+enc_page.out_edit.set_result_text("")
 
 win.close()
 

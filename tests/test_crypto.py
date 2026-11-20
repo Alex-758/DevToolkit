@@ -239,3 +239,60 @@ def test_encode_cipher_text_roundtrip():
     data = b"\x00\x01hello " + "你好".encode("utf-8")
     assert parse_cipher_text(encode_cipher_text(data, "base64"))[0] == data
     assert parse_cipher_text(encode_cipher_text(data, "hex"))[0] == data
+
+
+# ---------------------------------------------------------------------------
+# R5 回归修复：空明文 roundtrip（B1）/ 参数类型清洗（B5）/ v1.5 签名（B9）/ 回显截断（B12）
+# ---------------------------------------------------------------------------
+
+def test_empty_plaintext_roundtrip_all_symmetric_algos():
+    """B1：0 字节明文是合法输入，加密后必须能解密回空。"""
+    for algo in ("aes-gcm", "chacha20-poly1305", "aes-cbc", "aes-ecb"):
+        for key_src in ({"key_source": "passphrase", "passphrase": "pw"},
+                        {"key_source": "raw", "raw_key": "00" * 32}):
+            cfg = {"algorithm": algo, "key_size": 256, **key_src}
+            r1 = ct.encrypt(b"", cfg)
+            assert r1.ok, (algo, r1.error)
+            r2 = ct.decrypt(r1.data, cfg)
+            assert r2.ok and r2.data == b"", (algo, r2.error)
+
+
+def test_decrypt_short_tag_body_still_rejected():
+    """B1 对面：不足 16 字节认证 Tag 的密文仍要拒绝。"""
+    cfg = {"algorithm": "aes-gcm", "key_source": "raw", "raw_key": "00" * 32, "key_size": 256}
+    env = ct.encrypt(b"x", cfg).data  # nonce(12)+ct(1)+tag(16)=29B
+    assert not ct.decrypt(env[:-2], cfg).ok   # body=15B
+    assert not ct.decrypt(env[:-17], cfg).ok  # body=0B
+
+
+def test_crypto_numeric_params_as_strings_cleaned():
+    """B5：key_size / pbkdf2_iterations 为字符串时不得抛异常。"""
+    cfg = {"algorithm": "aes-gcm", "key_source": "passphrase", "passphrase": "pw",
+           "key_size": "256", "pbkdf2_iterations": "210000"}
+    r = ct.encrypt(b"data", cfg)
+    assert r.ok, r.error
+    assert ct.decrypt(r.data, cfg).ok
+
+
+def test_crypto_numeric_params_garbage_falls_back():
+    cfg = {"algorithm": "aes-gcm", "key_source": "passphrase", "passphrase": "pw",
+           "key_size": "abc", "pbkdf2_iterations": None}
+    r = ct.encrypt(b"data", cfg)
+    assert r.ok, r.error
+
+
+def test_rsa_pkcs1_v15_sign_verify_roundtrip():
+    """B9：v1.5 签名路径曾因误用 Crypto.Cipher.PKCS1_v1_5（密码模块）必然失败。"""
+    kp = ct.generate_keypair(2048).data
+    sig = ct.rsa_sign(kp["private_pem"], b"signed message", "v15")
+    assert sig.ok, sig.error
+    r = ct.rsa_verify(kp["public_pem"], b"signed message", sig.data, "v15")
+    assert r.ok and r.data is True
+    r2 = ct.rsa_verify(kp["public_pem"], b"tampered", sig.data, "v15")
+    assert r2.ok and r2.data is False
+
+
+def test_error_does_not_echo_huge_algorithm_name():
+    """B12：非法算法名的错误信息不回显完整输入。"""
+    r = ct.encrypt(b"x", {"algorithm": "x" * 100_000, "key_source": "passphrase", "passphrase": "pw"})
+    assert not r.ok and len(r.error) < 200

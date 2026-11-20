@@ -90,23 +90,43 @@ def _accumulate(chunks, cap: int) -> bytes:
 
 
 def _guarded_zlib(data: bytes, wbits: int, cap: int) -> bytes:
-    dec = zlib.decompressobj(wbits)
+    """逐块解压，限制输出上限；校验流完整性（eof），支持多成员拼接流。
+
+    R5 修复（B2/B3）：
+    - 旧实现不校验 dec.eof，截断的 gzip/zlib 会把部分解压结果当成功返回
+      （去尾 8/4 字节还会连完整性校验一起跳过）；现于 eof=False 时明确报错。
+    - eof 后若仍有非零余料，按同一格式继续解（cat a.gz b.gz 的多成员流，
+      旧实现静默丢弃后续成员）；余料无法按同格式开头（尾部垃圾）时按
+      gunzip「trailing garbage ignored」惯例忽略。
+    """
     out = bytearray()
-    # 分块喂入，限制输出长度，超过上限立即停止
-    pos = 0
     chunk_size = 1024 * 512
-    while True:
-        block = data[pos: pos + chunk_size]
-        if block:
+    remaining = memoryview(data)
+    while remaining:
+        dec = zlib.decompressobj(wbits)
+        pos = 0
+        total = len(remaining)
+        while not dec.eof and pos < total:
+            block = remaining[pos: pos + chunk_size]
             out.extend(dec.decompress(block, max(0, cap - len(out) + 1)))
             if len(out) > cap:
                 raise _CapExceeded()
             pos += chunk_size
-        else:
-            out.extend(dec.flush())
-            if len(out) > cap:
-                raise _CapExceeded()
+        out.extend(dec.flush())
+        if len(out) > cap:
+            raise _CapExceeded()
+        if not dec.eof:
+            raise ValueError("流不完整或已损坏（缺少结尾校验，常见于传输中断的文件）")
+        # eof 时未消费的输入：当前块内余量（unused_data）+ 其后所有块
+        rest = dec.unused_data + bytes(remaining[pos:])
+        if not rest.strip(b"\x00"):
             break
+        # 余料可能仍是拼接的下一个成员；若无法按同格式开头则为尾部垃圾，忽略
+        try:
+            zlib.decompressobj(wbits).decompress(rest[:32])
+        except zlib.error:
+            break
+        remaining = memoryview(rest)
     return bytes(out)
 
 
@@ -307,9 +327,12 @@ def decompress(data: bytes, fmt: Optional[str] = None, cap_mb: int = DEFAULT_CAP
             label=FORMAT_NAMES.get(fmt, fmt),
         )
     except _CapExceeded:
+        # error_detail 作为可编程标记：调用方（智能解码 / 自动识别）可区分
+        # 「超限终止」与「格式无效」，把真实原因透传给用户（R5 B7/B13）
         return Result.failure(
             f"解压结果超过 {cap_mb} MB 上限，已终止（压缩炸弹防护）。"
-            "如确需处理更大文件，请在设置中调高上限"
+            "如确需处理更大文件，请在设置中调高上限",
+            "cap_exceeded",
         )
     except ModuleNotFoundError as exc:
         return Result.failure(f"{exc.name} 库未安装。请运行：pip install {exc.name}")
@@ -341,11 +364,24 @@ def sniff(data: bytes) -> Optional[str]:
 
 
 def try_auto_decompress(data: bytes, cap_mb: int = DEFAULT_CAP_MB) -> Result:
-    """魔数识别失败时，再尝试裸 DEFLATE / ZLIB / GZIP 三种 wbits。"""
+    """魔数识别失败时，再尝试裸 DEFLATE / ZLIB / GZIP 三种 wbits。
+
+    R5 修复（B7）：三种 wbits 都因超限终止时，如实报告「压缩炸弹防护」，
+    旧实现把炸弹信号吞掉，报成「不是有效的数据」误导排查。
+    """
+    cap_exceeded = False
     for fmt, wbits in (("gzip", 31), ("zlib", 15), ("deflate", -15)):
         try:
             out = _guarded_zlib(data, wbits, int(cap_mb) * 1024 * 1024)
             return Result.success(out, fmt=fmt, in_bytes=len(data), out_bytes=len(out))
-        except (_CapExceeded, zlib.error):
+        except _CapExceeded:
+            cap_exceeded = True
+        except (zlib.error, ValueError):
             continue
+    if cap_exceeded:
+        return Result.failure(
+            f"解压结果超过 {int(cap_mb)} MB 上限，已终止（压缩炸弹防护）。"
+            "如确需处理更大文件，请在设置中调高上限",
+            "cap_exceeded",
+        )
     return Result.failure("无法解压：不是有效的 GZIP / ZLIB / DEFLATE 数据")

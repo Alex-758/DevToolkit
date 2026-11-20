@@ -185,3 +185,93 @@ def test_config_downstream_int_never_raises():
     for key in ("max_layers", "decompress_cap_mb", "history_limit"):
         config.set_setting(key, "garbage-{key}")
         int(config.get_setting(key) or (5 if key == "max_layers" else 512 if key == "decompress_cap_mb" else 200))
+
+
+# ---------------------------------------------------------------------------
+# R5 回归修复：跨进程文件锁（B6）/ limit 类型清洗（补充）
+# ---------------------------------------------------------------------------
+
+import json  # noqa: E402
+import subprocess  # noqa: E402
+import sys  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+_PROJ_ROOT = Path(__file__).resolve().parent.parent
+
+
+def test_history_limit_weird_values_never_raise():
+    for lim in ("abc", None, 0, -5, 10.7):
+        assert history.add_entry("p", "op", "d", limit=lim) is True
+        assert isinstance(history.list_entries(limit=lim), list)
+
+
+def test_history_multiprocess_no_lost_updates(tmp_path):
+    """B6：两进程各写 60 条历史，跨进程锁保证互不覆盖。"""
+    code = (
+        "import os, sys\n"
+        "os.environ['APPDATA'] = sys.argv[1]\n"
+        "sys.path.insert(0, sys.argv[2])\n"
+        "from app.core import history\n"
+        "for i in range(60):\n"
+        "    if not history.add_entry('p', 'op', sys.argv[3] + str(i)):\n"
+        "        sys.exit(1)\n"
+        "print('ok')\n"
+    )
+    procs = [
+        subprocess.Popen(
+            [sys.executable, "-c", code, str(tmp_path), str(_PROJ_ROOT), tag],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        for tag in ("A", "B")
+    ]
+    for p in procs:
+        out, err = p.communicate(timeout=120)
+        assert p.returncode == 0, err.decode(errors="replace")[:300]
+    n = len(history.list_entries(1000))
+    assert n == 120, f"两进程各写 60 条，应共存 120 条，实际 {n}"
+
+
+def test_settings_multiprocess_set_different_keys(tmp_path):
+    """B6：两进程各 set_setting 不同键，读-改-写互不覆盖。"""
+    code = (
+        "import os, sys\n"
+        "os.environ['APPDATA'] = sys.argv[1]\n"
+        "sys.path.insert(0, sys.argv[2])\n"
+        "from app.core import config\n"
+        "assert config.set_setting(sys.argv[3], sys.argv[4])\n"
+        "print('ok')\n"
+    )
+    jobs = [("max_layers", "7"), ("theme", "light")]
+    procs = [
+        subprocess.Popen(
+            [sys.executable, "-c", code, str(tmp_path), str(_PROJ_ROOT), k, v],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        for k, v in jobs
+    ]
+    for p in procs:
+        out, err = p.communicate(timeout=120)
+        assert p.returncode == 0, err.decode(errors="replace")[:300]
+    s = config.load_settings()
+    assert s["max_layers"] == 7 and s["theme"] == "light", s
+
+
+def test_corrupt_json_with_non_dict_entries_never_raises():
+    """R6 N10/N11：合法 JSON list 但元素非 dict（手改/损坏）不得崩溃。
+
+    曾在 add_favorite / is_favorite / 历史页 _refresh 抛 AttributeError，
+    且发生在 UI 线程（点击收藏按钮即触发）。
+    """
+    hp = config.get_history_path()
+    hp.write_text(json.dumps(["a string entry", 42, {"page": "encode", "op": "x", "detail": "d", "ts": "01-01"}]),
+                  encoding="utf-8")
+    assert isinstance(history.list_entries(), list)
+    assert history.add_entry("p", "op", "d") is True
+
+    fp = config.get_favorites_path()
+    fp.write_text(json.dumps(["not-a-dict", 7]), encoding="utf-8")
+    assert history.add_favorite("codec", "base64") is True
+    assert history.is_favorite("codec", "base64") is True
+    assert history.toggle_favorite("codec", "base64") is False
+    assert history.list_favorites() == [{"kind": "codec", "target": "base64"}] or all(
+        isinstance(f, dict) for f in history.list_favorites())

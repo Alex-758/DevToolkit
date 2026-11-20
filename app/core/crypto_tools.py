@@ -16,11 +16,10 @@ import os
 import secrets
 from typing import Optional, Tuple
 
-from Crypto.Cipher import AES, ChaCha20_Poly1305
-from Crypto.Cipher import PKCS1_OAEP, PKCS1_v1_5
+from Crypto.Cipher import AES, ChaCha20_Poly1305, PKCS1_OAEP
 from Crypto.Hash import SHA256
 from Crypto.PublicKey import RSA
-from Crypto.Signature import pss
+from Crypto.Signature import PKCS1_v1_5, pss
 from Crypto.Util.Padding import pad, unpad
 
 from .results import Result
@@ -42,6 +41,24 @@ ALGORITHMS = {
 }
 
 ALGO_ORDER = ["aes-gcm", "aes-cbc", "aes-ecb", "chacha20-poly1305", "rsa-oaep", "rsa-pss"]
+
+
+def _safe_int(value, default: int) -> int:
+    """cfg 数值清洗：非法类型 / 非法值回落默认（与 config 层「越界回落」策略一致）。
+
+    旧实现 int(value) 直接暴露在 try 之外，字符串参数会让 ValueError
+    逃出本应绝不抛异常的核心层。
+    """
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _brief(text, limit: int = 60) -> str:
+    """错误信息中的用户输入回显截断：防止超长输入撑爆错误提示。"""
+    s = str(text)
+    return s if len(s) <= limit else s[:limit] + "…"
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +120,7 @@ def generate_random_key(key_bytes: int) -> Result:
 def _resolve_key(cfg: dict, algo_id: str) -> Tuple[Optional[bytes], Optional[Result]]:
     """根据配置返回 (key, error_result)。口令模式返回 None 交由信封处理。"""
     info = ALGORITHMS[algo_id]
-    key_bytes = (cfg.get("key_size", 256)) // 8 if info["sizes"] else 32
+    key_bytes = _safe_int(cfg.get("key_size", 256), 256) // 8 if info["sizes"] else 32
     if cfg.get("key_source", "passphrase") == "raw":
         parsed = parse_raw_key(cfg.get("raw_key", ""), key_bytes)
         if not parsed.ok:
@@ -154,14 +171,14 @@ def encrypt(data: bytes, cfg: dict) -> Result:
         return Result.failure(f"输入过大（超过 64 MB 上限），请使用文件处理")
     algo_id = cfg.get("algorithm", "aes-gcm")
     if algo_id not in ALGORITHMS or algo_id.startswith("rsa"):
-        return Result.failure(f"对称加密不支持算法：{algo_id}")
+        return Result.failure(f"对称加密不支持算法：{_brief(algo_id)}")
     info = ALGORITHMS[algo_id]
-    key_size = int(cfg.get("key_size", 256))
+    key_size = _safe_int(cfg.get("key_size", 256), 256)
     if info["sizes"] and key_size not in info["sizes"]:
         return Result.failure(f"{info['name']} 密钥长度必须是 {info['sizes']} 位之一")
     key_bytes = key_size // 8
     passphrase_mode = cfg.get("key_source", "passphrase") != "raw"
-    iterations = int(cfg.get("pbkdf2_iterations", DEFAULT_ITERATIONS))
+    iterations = _safe_int(cfg.get("pbkdf2_iterations", DEFAULT_ITERATIONS), DEFAULT_ITERATIONS)
 
     key_or_err = _resolve_key(cfg, algo_id)
     if key_or_err[1] is not None:
@@ -220,12 +237,12 @@ def decrypt(data: bytes, cfg: dict) -> Result:
         return Result.failure(f"输入过大（超过 64 MB 上限）")
     algo_id = cfg.get("algorithm", "aes-gcm")
     if algo_id not in ALGORITHMS or algo_id.startswith("rsa"):
-        return Result.failure(f"对称解密不支持算法：{algo_id}")
+        return Result.failure(f"对称解密不支持算法：{_brief(algo_id)}")
     info = ALGORITHMS[algo_id]
-    key_size = int(cfg.get("key_size", 256))
+    key_size = _safe_int(cfg.get("key_size", 256), 256)
     key_bytes = key_size // 8
     passphrase_mode = cfg.get("key_source", "passphrase") != "raw"
-    iterations = int(cfg.get("pbkdf2_iterations", DEFAULT_ITERATIONS))
+    iterations = _safe_int(cfg.get("pbkdf2_iterations", DEFAULT_ITERATIONS), DEFAULT_ITERATIONS)
     nonce_len = info.get("nonce_len", info.get("iv_len", 0))
 
     try:
@@ -242,8 +259,10 @@ def decrypt(data: bytes, cfg: dict) -> Result:
             key = parsed.data
 
         if algo_id == "aes-gcm":
-            if len(body) < 17:
-                return Result.failure("密文不完整：GCM 密文至少包含 1 字节数据 + 16 字节认证 Tag")
+            if len(body) < 16:
+                # 16 字节 = 纯认证 Tag：0 字节明文是合法输入（R5 B1 修复，
+                # 旧实现要求至少 1 字节密文，导致空明文加密成功却永远无法解密）
+                return Result.failure("密文不完整：GCM 密文至少包含 16 字节认证 Tag")
             ct, tag = body[:-16], body[-16:]
             cipher = AES.new(key, AES.MODE_GCM, nonce=nonce, mac_len=16)
             try:
@@ -251,8 +270,9 @@ def decrypt(data: bytes, cfg: dict) -> Result:
             except (ValueError, KeyError):
                 return Result.failure("解密失败：认证校验未通过（密钥错误或密文已被篡改）")
         elif algo_id == "chacha20-poly1305":
-            if len(body) < 17:
-                return Result.failure("密文不完整：Poly1305 密文至少包含 1 字节数据 + 16 字节认证 Tag")
+            if len(body) < 16:
+                # 同 GCM：0 字节明文 + 16 字节 Tag 是合法密文（R5 B1 修复）
+                return Result.failure("密文不完整：Poly1305 密文至少包含 16 字节认证 Tag")
             ct, tag = body[:-16], body[-16:]
             cipher = ChaCha20_Poly1305.new(key=key, nonce=nonce)
             try:

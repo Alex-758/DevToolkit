@@ -125,3 +125,31 @@ def test_fetch_latest_release_missing_tag():
     with patch.object(updater, "urlopen", lambda req, timeout: _FakeResp('{"html_url": "x"}')):
         r = updater.fetch_latest_release()
     assert not r.ok and "版本号" in r.error
+
+
+# ---------------------------------------------------------------------------
+# R5 回归修复：版本段数补零对齐（B11）
+# ---------------------------------------------------------------------------
+
+def _fake_release(tag):
+    return lambda: Result.success({"tag": tag, "url": "https://github.com/a/b", "name": ""})
+
+
+def test_two_segment_tag_same_version_no_update():
+    r = updater.check_update("1.2", _fake_release("v1.2.0"))
+    assert r.ok and r.data["has_update"] is False
+
+
+def test_two_segment_current_newer_no_update():
+    r = updater.check_update("1.2.1", _fake_release("v1.2"))
+    assert r.ok and r.data["has_update"] is False
+
+
+def test_two_segment_tag_newer_has_update():
+    r = updater.check_update("1.2", _fake_release("v1.3"))
+    assert r.ok and r.data["has_update"] is True
+
+
+def test_three_segment_compare_unchanged():
+    assert updater.check_update("1.9.9", _fake_release("v1.10.0")).data["has_update"] is True
+    assert updater.check_update("1.1.0", _fake_release("v1.1.0")).data["has_update"] is False

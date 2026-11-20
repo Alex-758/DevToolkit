@@ -12,11 +12,20 @@ import threading
 import time
 from typing import List, Optional
 
-from .config import get_favorites_path, get_history_path
+from .config import cross_process_lock, get_favorites_path, get_history_path
 
 _lock = threading.Lock()
 
 MAX_DETAIL_LEN = 120
+DEFAULT_LIMIT = 200
+
+
+def _clamp_limit(limit) -> int:
+    """limit 类型清洗：非法值回落默认 200，绝不抛异常（R5 补充修复）。"""
+    try:
+        return int(limit)
+    except (TypeError, ValueError):
+        return DEFAULT_LIMIT
 
 
 def _load_list(path) -> list:
@@ -24,7 +33,10 @@ def _load_list(path) -> list:
         if path.is_file():
             raw = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(raw, list):
-                return raw
+                # 元素级清洗（R6 N10/N11）：文件可能是合法 JSON list 但元素
+                # 非 dict（手改 / 损坏），f.get(...) 会 AttributeError 且在
+                # UI 线程触发（点收藏 / 刷新历史页即崩）。丢弃非 dict 项。
+                return [x for x in raw if isinstance(x, dict)]
     except (OSError, ValueError):
         pass
     return []
@@ -40,7 +52,7 @@ def _save_list(path, items: list) -> bool:
         return False
 
 
-def add_entry(page: str, op: str, detail: str, limit: int = 200) -> bool:
+def add_entry(page: str, op: str, detail: str, limit: int = DEFAULT_LIMIT) -> bool:
     """新增一条历史记录。detail 必须是脱敏摘要（不含密钥 / 明文 / 密文）。"""
     if detail and len(detail) > MAX_DETAIL_LEN:
         detail = detail[:MAX_DETAIL_LEN] + "…"
@@ -50,11 +62,12 @@ def add_entry(page: str, op: str, detail: str, limit: int = 200) -> bool:
         "op": op,
         "detail": detail,
     }
-    with _lock:
+    with _lock, cross_process_lock(get_history_path()):
         items = _load_list(get_history_path())
         items.insert(0, entry)
-        if len(items) > max(10, int(limit)):
-            items = items[: max(10, int(limit))]
+        cap = max(10, _clamp_limit(limit))
+        if len(items) > cap:
+            items = items[:cap]
         return _save_list(get_history_path(), items)
 
 
@@ -62,15 +75,15 @@ def _now_str_struct():
     return time.localtime()
 
 
-def list_entries(limit: int = 200) -> List[dict]:
+def list_entries(limit: int = DEFAULT_LIMIT) -> List[dict]:
     with _lock:
         items = _load_list(get_history_path())
-    return items[: max(1, int(limit))]
+    return items[: max(1, _clamp_limit(limit))]
 
 
 def remove_entry(index: int) -> bool:
     """按 list_entries 返回顺序中的下标删除（0 起始）。"""
-    with _lock:
+    with _lock, cross_process_lock(get_history_path()):
         items = _load_list(get_history_path())
         if 0 <= index < len(items):
             items.pop(index)
@@ -94,18 +107,18 @@ def list_favorites() -> List[dict]:
 
 def add_favorite(kind: str, target: str) -> bool:
     """kind: 'codec'（编码算法）| 'hash'（哈希算法）；target 为算法 id。"""
-    favs = list_favorites()
-    if any(f.get("kind") == kind and f.get("target") == target for f in favs):
-        return True
-    favs.append({"kind": kind, "target": target, "ts": time.strftime("%Y-%m-%d %H:%M:%S", _now_str_struct())})
-    with _lock:
+    with _lock, cross_process_lock(get_favorites_path()):
+        favs = _load_list(get_favorites_path())
+        if any(f.get("kind") == kind and f.get("target") == target for f in favs):
+            return True
+        favs.append({"kind": kind, "target": target, "ts": time.strftime("%Y-%m-%d %H:%M:%S", _now_str_struct())})
         return _save_list(get_favorites_path(), favs)
 
 
 def remove_favorite(kind: str, target: str) -> bool:
-    favs = list_favorites()
-    favs = [f for f in favs if not (f.get("kind") == kind and f.get("target") == target)]
-    with _lock:
+    with _lock, cross_process_lock(get_favorites_path()):
+        favs = _load_list(get_favorites_path())
+        favs = [f for f in favs if not (f.get("kind") == kind and f.get("target") == target)]
         return _save_list(get_favorites_path(), favs)
 
 

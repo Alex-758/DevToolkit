@@ -243,3 +243,18 @@ def test_qp_encode_no_trailing_newline():
     """QP 编码不应给短输入附加多余换行（曾疑似 quopri 尾部换行，实测不存在）。"""
     r = encoders.run("qp", "encode", "hello")
     assert r.ok and r.data == "hello"
+
+
+# ---------------------------------------------------------------------------
+# R5 回归修复：ASCII 解码严格词法校验（B10）
+# ---------------------------------------------------------------------------
+
+def test_ascii_decode_strict_tokens():
+    """int() 宽松解析曾接受下划线分隔符 / 全角与阿拉伯-印度数字 / 带符号数。"""
+    for bad in ("1_0", "١٢٣", "１２３", "+1", "0x", "0xZZ", "ABC"):
+        r = encoders.decode("ascii", bad, {})
+        assert not r.ok, bad
+    for good, expect in (("65", "A"), ("65 66", "AB"), ("0x41", "A"),
+                         ("0X41 0x42", "AB"), ("007", "\x07")):
+        r = encoders.decode("ascii", good, {})
+        assert r.ok and r.data == expect, (good, r.error)

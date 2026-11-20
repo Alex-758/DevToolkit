@@ -209,3 +209,31 @@ def test_smart_layer_limit_enforced():
     r = smart_decode.smart_decode(payload_str, max_layers=10)
     assert r.ok
     assert r.data.layers_used <= 10
+
+
+# ---------------------------------------------------------------------------
+# R5 回归修复：孤立代理字符友好失败（B4）/ 链路内炸弹如实上报（B13）
+# ---------------------------------------------------------------------------
+
+def test_text_hash_lone_surrogate_friendly_failure():
+    r = hashing.text_hash("\ud800", "sha256")
+    assert not r.ok and "编码" in r.error
+
+
+def test_text_hash_all_lone_surrogate_friendly_failure():
+    r = hashing.text_hash_all("\ud800")
+    assert not r.ok and r.error
+
+
+def test_batch_hash_surrogate_row_fails_not_crashes():
+    from app.core import batch
+    r = batch.batch_hash("\ud800", "sha256")
+    assert r.ok and r.meta["failed"] == 1 and r.data[0].error
+
+
+def test_smart_decode_bomb_in_chain_reports_bomb():
+    """B13：链路中触发压缩炸弹防护时如实上报，不与「未识别特征」混淆。"""
+    bomb = zlib.compress(b"\x00" * (64 * 1024 * 1024), 9)
+    text = base64.b64encode(bomb).decode()
+    r = smart_decode.smart_decode(text, 5, 16)
+    assert not r.ok and "上限" in r.error

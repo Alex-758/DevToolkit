@@ -59,7 +59,7 @@ git clone https://github.com/Alex-758/DevToolkit.git
 cd DevToolkit
 pip install -r requirements-dev.txt   # 国内网络建议加清华镜像 -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-# 运行测试（279 项 pytest 单元测试 + 53 项全场景 UI 模拟测试）
+# 运行测试（306 项 pytest 单元测试 + 54 项全场景 UI 模拟测试）
 python -m pytest tests/ -q
 python tests/ui_scenarios.py
 
@@ -108,7 +108,7 @@ DevToolkit/
 └── DevToolkit.spec         # PyInstaller 打包配置
 ```
 
-**质量保障**：279 项 pytest 单元测试（含安全约束测试：密钥不进历史、信封不含密钥、压缩炸弹防护、超限快速失败等）+ 53 项全场景 UI 模拟测试（真实控件端到端）+ 打包后自检 + UI 冒烟测试。
+**质量保障**：306 项 pytest 单元测试（含安全约束测试：密钥不进历史、信封不含密钥、压缩炸弹防护、超限快速失败、截断流完整性、多成员拼接、跨进程写锁等）+ 54 项全场景 UI 模拟测试（真实控件端到端）+ 打包后自检 + UI 冒烟测试。
 
 ## 许可
 
