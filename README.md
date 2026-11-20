@@ -5,7 +5,7 @@
 </p>
 
 **纯离线运行的 Windows 编码解码工具箱** —— 编码 / 加密 / 压缩 / 哈希 / 智能解码，一个 EXE 全搞定。
-深色默认、浅色可切换 · 当前版本 [v1.1.0](https://github.com/Alex-758/DevToolkit/releases/latest) · MIT License
+深色默认、浅色可切换 · 当前版本 [v1.2.0](https://github.com/Alex-758/DevToolkit/releases/latest) · MIT License
 
 ## 下载
 

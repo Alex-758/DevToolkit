@@ -496,9 +496,10 @@ about_page = win.pages["about"]
 _orig_fetch = _upd.fetch_latest_release
 
 # 场景 18：发现新版本 → chip 显示新版本号 + 下载页链接，按钮恢复
+# （mock tag 需严格大于 APP_VERSION；随版本升级同步调高）
 _upd.fetch_latest_release = lambda: _R.success({
-    "tag": "v1.2.0",
-    "url": "https://github.com/Alex-758/DevToolkit/releases/tag/v1.2.0",
+    "tag": "v1.3.0",
+    "url": "https://github.com/Alex-758/DevToolkit/releases/tag/v1.3.0",
     "name": "",
 })
 about_page._check_update()
@@ -512,7 +513,7 @@ for _ in range(5):
     time.sleep(0.01)
 check("update: new version chip with download link",
       about_page.check_btn.isEnabled()
-      and "发现新版本 v1.2.0" in about_page.update_chip.text()
+      and "发现新版本 v1.3.0" in about_page.update_chip.text()
       and "https://github.com/" in about_page.update_chip.text(),
       repr(about_page.update_chip.text()))
 
