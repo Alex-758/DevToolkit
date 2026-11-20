@@ -48,6 +48,7 @@ class EncodePage(PageBase):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAcceptDrops(True)
+        self._batch_rows = None  # 最近一次批量执行的逐行结果（供交换按钮使用）
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 16, 20, 16)
         root.setSpacing(12)
@@ -268,8 +269,15 @@ class EncodePage(PageBase):
     def _swap(self):
         out_text = self.out_edit.result_text()
         in_text = self.in_edit.toPlainText()
+        # 批量模式下输出带「行号  结果」前缀，直接交换会把行号混进输入，
+        # 再次执行整批报错（R5 B8）；改为交换纯逐行结果，失败行保留
+        # 「✕ 错误」占位以维持行对齐
+        if self.batch_chk.isChecked() and self._batch_rows is not None:
+            from ...core.batch import format_rows
+            out_text = format_rows(self._batch_rows, with_index=False)
         self.out_edit.set_result_text(in_text)
         self.in_edit.setPlainText(out_text)
+        self._batch_rows = None  # 交换后输出区已不再是批量结果
         self.statusMsg.emit("已交换输入与输出内容")
 
     def _toggle_fav(self):
@@ -347,7 +355,9 @@ class EncodePage(PageBase):
                 from ...core.batch import format_rows
                 shown = format_rows(result.data)
                 self.out_edit.set_result_text(shown)
+                self._batch_rows = result.data
         else:
+            self._batch_rows = None
             result = encoders.run(codec.id, direction, text, params)
             if result.ok:
                 self.out_edit.set_result_text(result.data)
