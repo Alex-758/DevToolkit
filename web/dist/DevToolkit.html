@@ -1,0 +1,2920 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DevToolkit Web · 离线编码解码工具箱</title>
+<style>/* DevToolkit Web 样式：与桌面版 GPT 风格一致（深色默认 + 浅色切换）。 */
+:root {
+  --bg: #212121; --bg2: #2a2a2a; --bg3: #303030;
+  --fg: #ececec; --fg2: #b4b4b4; --fg3: #8f8f8f;
+  --border: #3a3a3a; --border-strong: #4a4a4a;
+  --accent: #10a37f; --accent-fg: #ffffff;
+  --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
+  --mono: Consolas, "Cascadia Mono", "Courier New", monospace;
+}
+html[data-theme="light"] {
+  --bg: #ffffff; --bg2: #f5f5f5; --bg3: #ededed;
+  --fg: #1a1a1a; --fg2: #5d5d5d; --fg3: #8f8f8f;
+  --border: #e0e0e0; --border-strong: #c8c8c8;
+  --accent: #10a37f; --accent-fg: #ffffff;
+  --ok: #16a34a; --warn: #b45309; --err: #dc2626;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--fg); font-size: 13px;
+  font-family: -apple-system, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  display: flex; overflow: hidden;
+}
+
+/* ---- 侧边栏 ---- */
+aside {
+  width: 196px; flex: 0 0 196px; background: var(--bg2);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; padding: 12px 10px;
+  overflow-y: auto;
+}
+.brand { display: flex; align-items: center; gap: 9px; padding: 0 2px 4px; }
+.logo {
+  width: 28px; height: 28px; border-radius: 8px; background: var(--accent);
+  color: #fff; font-weight: 700; font-size: 12px;
+  display: flex; align-items: center; justify-content: center; flex: 0 0 28px;
+}
+.brand-name { font-weight: 600; font-size: 14px; }
+.brand-ver { color: var(--fg3); font-size: 11px; }
+.side-title { color: var(--fg3); font-size: 11px; margin: 14px 4px 6px; }
+nav { display: flex; flex-direction: column; gap: 2px; }
+nav button {
+  all: unset; cursor: pointer; padding: 8px 10px; border-radius: 8px;
+  font-size: 13px; color: var(--fg); display: flex; align-items: center; gap: 8px;
+}
+nav button:hover { background: var(--bg3); }
+nav button[aria-current="page"] { background: var(--bg3); font-weight: 600; }
+nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.side-foot { margin-top: auto; display: flex; gap: 6px; padding-top: 12px; }
+.icon-btn {
+  all: unset; cursor: pointer; width: 32px; height: 30px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center; color: var(--fg2);
+}
+.icon-btn:hover { background: var(--bg3); color: var(--fg); }
+
+/* ---- 主区 ---- */
+main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.scroll { flex: 1; overflow-y: auto; padding: 16px 20px; }
+h1 { font-size: 17px; margin: 0 0 4px; font-weight: 600; }
+.sub { color: var(--fg3); font-size: 12px; margin-bottom: 12px; }
+.card {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 16px; margin-bottom: 12px;
+}
+.card-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;
+}
+.card-title { font-weight: 600; font-size: 13px; }
+.meta { color: var(--fg3); font-size: 11px; }
+.spacer { flex: 1; }
+
+textarea, input[type="text"], input[type="password"], select {
+  width: 100%; background: var(--bg3); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+  font-size: 13px; font-family: inherit;
+}
+textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; min-height: 120px; }
+textarea:focus, input:focus, select:focus { outline: none; border-color: var(--accent); }
+select { cursor: pointer; }
+label.field { display: block; color: var(--fg2); font-size: 12px; margin-bottom: 4px; }
+
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+@media (max-width: 820px) { .grid2 { grid-template-columns: 1fr; } }
+/* 表单字段：标签在上、控件占满整行，避免窄输入框与错位按钮 */
+.field-row { display: flex; flex-direction: column; gap: 4px; }
+.field-row input[type="number"] { max-width: 160px; }
+.inline-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+.full-width { grid-column: 1 / -1; }
+
+button.btn {
+  all: unset; cursor: pointer; padding: 7px 14px; border-radius: 8px;
+  background: var(--bg3); color: var(--fg); font-size: 12.5px;
+  border: 1px solid var(--border); white-space: nowrap;
+}
+button.btn:hover { border-color: var(--border-strong); }
+button.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; font-weight: 600; }
+button.btn.primary:hover { filter: brightness(1.08); }
+button.btn:disabled { opacity: .5; cursor: not-allowed; }
+button.btn.small { padding: 4px 9px; font-size: 11.5px; }
+
+.seg { display: inline-flex; background: var(--bg3); border-radius: 8px; padding: 2px; gap: 2px; }
+.seg button {
+  all: unset; cursor: pointer; padding: 5px 14px; border-radius: 6px; font-size: 12.5px;
+}
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px;
+  border-radius: 6px; font-size: 11.5px; background: var(--bg3); color: var(--fg2);
+}
+.chip.ok { background: rgba(16,163,127,.14); color: var(--ok); }
+.chip.warn { background: rgba(251,191,36,.14); color: var(--warn); }
+.chip.err { background: rgba(248,113,113,.14); color: var(--err); }
+.chip.info { background: rgba(128,128,128,.14); color: var(--fg2); }
+.chip:empty { display: none; }
+
+.banner {
+  border-radius: 8px; padding: 9px 12px; font-size: 12px; line-height: 1.5;
+  background: rgba(16,163,127,.1); color: var(--ok);
+}
+.banner.warn { background: rgba(251,191,36,.1); color: var(--warn); }
+.banner.err { background: rgba(248,113,113,.1); color: var(--err); }
+.banner.info { background: rgba(128,128,128,.1); color: var(--fg2); }
+
+.hash-list { display: grid; grid-template-columns: 1fr; gap: 6px; }
+.hash-row { display: grid; grid-template-columns: 88px 1fr auto; gap: 8px; align-items: center; }
+.hash-row .name { color: var(--fg2); font-size: 12px; }
+.hash-row input {
+  font-family: var(--mono); font-size: 11.5px; padding: 5px 8px;
+  background: var(--bg3); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--fg); width: 100%;
+}
+
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { text-align: left; color: var(--fg3); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+tr:hover td { background: var(--bg3); }
+.empty { color: var(--fg3); text-align: center; padding: 28px 0; font-size: 12px; }
+
+.steps { display: flex; flex-direction: column; gap: 8px; }
+.step { background: var(--bg3); border-radius: 8px; padding: 10px 12px; }
+.step-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.step-idx { color: var(--accent); font-weight: 600; font-size: 12px; }
+.step-action { font-weight: 600; font-size: 12.5px; }
+.step-detail { color: var(--fg3); font-size: 11.5px; }
+.step-preview { font-family: var(--mono); font-size: 11px; color: var(--fg2); margin-top: 5px; word-break: break-all; }
+
+.statusbar {
+  flex: 0 0 26px; display: flex; align-items: center; padding: 0 14px;
+  background: var(--bg2); border-top: 1px solid var(--border);
+  font-size: 11.5px; color: var(--fg3);
+}
+.page { display: none; }
+.page.active { display: block; }
+.mt8 { margin-top: 8px; }
+.mt12 { margin-top: 12px; }
+.hint { color: var(--fg3); font-size: 11.5px; padding: 6px 2px; }
+</style>
+</head>
+<body>
+
+<aside>
+  <div class="brand">
+    <div class="logo">DT</div>
+    <div>
+      <div class="brand-name">DevToolkit</div>
+      <div class="brand-ver" id="verLabel">Web v1.0</div>
+    </div>
+  </div>
+  <div class="side-title">功能导航</div>
+  <nav id="nav"></nav>
+  <div class="side-foot">
+    <button class="icon-btn" id="themeBtn" title="切换深色 / 浅色（Ctrl+T）">◐</button>
+    <button class="icon-btn" id="selfTestBtn" title="运行算法自检">⚙</button>
+  </div>
+</aside>
+
+<main>
+  <div class="scroll" id="scrollArea">
+
+    <!-- ================= 编码解码 ================= -->
+    <section class="page active" id="page-encode">
+      <h1>编码解码</h1>
+      <div class="sub">12 种编码双向转换 · UTF-8 中文安全 · 多行批量逐行处理</div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">输入内容</span>
+          <span class="meta" id="encInMeta">0 字符</span>
+          <span class="spacer"></span>
+          <button class="btn small" id="encPaste">粘贴</button>
+          <button class="btn small" id="encClear">清空</button>
+        </div>
+        <textarea id="encIn" placeholder="在此粘贴或输入内容…"></textarea>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <label class="field" style="margin:0">算法</label>
+          <select id="encAlgo" style="width:200px"></select>
+          <div class="seg" id="encDir">
+            <button data-dir="encode" aria-pressed="true">编码</button>
+            <button data-dir="decode" aria-pressed="false">解码</button>
+          </div>
+          <label class="row" style="gap:6px;margin:0">
+            <input type="checkbox" id="encBatch"> <span class="meta">逐行批量</span>
+          </label>
+          <span class="spacer"></span>
+          <button class="btn" id="encSwap">交换</button>
+          <button class="btn primary" id="encRun">执行</button>
+        </div>
+        <div class="hint" id="encHint"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">输出结果</span>
+          <span class="chip" id="encChip"></span>
+          <span class="spacer"></span>
+          <button class="btn small" id="encCopy">复制结果</button>
+        </div>
+        <textarea id="encOut" readonly placeholder="结果将显示在这里"></textarea>
+      </div>
+    </section>
+
+    <!-- ================= 加密解密 ================= -->
+    <section class="page" id="page-crypto">
+      <h1>加密解密</h1>
+      <div class="sub">AES-GCM / AES-CBC / ChaCha20-Poly1305 · RSA-OAEP 加解密 · RSA-PSS 签名验签</div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">输入内容</span>
+          <span class="meta" id="cryInMeta">0 字符</span>
+          <span class="spacer"></span>
+          <button class="btn small" id="cryClear">清空</button>
+        </div>
+        <textarea id="cryIn" placeholder="在此粘贴或输入内容…"></textarea>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <label class="field" style="margin:0">算法</label>
+          <select id="cryAlgo" style="width:220px"></select>
+          <div class="seg" id="cryDir">
+            <button data-dir="encrypt" aria-pressed="true">加密</button>
+            <button data-dir="decrypt" aria-pressed="false">解密</button>
+          </div>
+          <span class="spacer"></span>
+          <button class="btn primary" id="cryRun">执行</button>
+        </div>
+      </div>
+
+      <div class="card" id="cryParamsCard">
+        <div class="card-head"><span class="card-title">密钥与参数</span><span class="meta">按所选算法动态显示</span></div>
+        <div class="grid2" id="cryParams"></div>
+        <div class="hint" id="cryHint"></div>
+        <div id="cryBanner"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">输出结果</span>
+          <span class="chip" id="cryChip"></span>
+          <span class="spacer"></span>
+          <button class="btn small" id="cryCopy">复制结果</button>
+        </div>
+        <textarea id="cryOut" readonly placeholder="结果将显示在这里"></textarea>
+      </div>
+    </section>
+
+    <!-- ================= 压缩解压 ================= -->
+    <section class="page" id="page-compress">
+      <h1>压缩解压</h1>
+      <div class="sub">GZIP / ZLIB / DEFLATE · 解压输出上限防护 · 输出可用 Base64 展示</div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">输入内容</span>
+          <span class="meta" id="cpInMeta">0 字符</span>
+          <span class="spacer"></span>
+          <button class="btn small" id="cpClear">清空</button>
+        </div>
+        <textarea id="cpIn" placeholder="在此粘贴文本，或粘贴 Base64 / Hex 编码的压缩数据…"></textarea>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <label class="field" style="margin:0">压缩格式</label>
+          <select id="cpFmt" style="width:150px"></select>
+          <div class="seg" id="cpDir">
+            <button data-dir="compress" aria-pressed="true">压缩</button>
+            <button data-dir="decompress" aria-pressed="false">解压</button>
+          </div>
+          <label class="row" style="gap:6px;margin:0">
+            <input type="checkbox" id="cpB64" checked> <span class="meta">输出以 Base64 显示</span>
+          </label>
+          <span class="spacer"></span>
+          <button class="btn primary" id="cpRun">执行</button>
+        </div>
+        <div class="hint">浏览器端支持 GZIP / ZLIB / DEFLATE；ZIP / Brotli / Zstandard / LZ4 无原生实现，会明确提示。</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">输出结果</span>
+          <span class="chip" id="cpChip"></span>
+          <span class="spacer"></span>
+          <button class="btn small" id="cpCopy">复制结果</button>
+        </div>
+        <textarea id="cpOut" readonly placeholder="结果将显示在这里"></textarea>
+      </div>
+    </section>
+
+    <!-- ================= 哈希 ================= -->
+    <section class="page" id="page-hash">
+      <h1>哈希计算</h1>
+      <div class="sub">10 种算法同屏 · 输入即自动计算 · 支持文件哈希与双值比较</div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">输入内容</span>
+          <span class="meta" id="hsInMeta">0 字符</span>
+          <span class="spacer"></span>
+          <button class="btn small" id="hsFileBtn">计算文件哈希</button>
+          <input type="file" id="hsFile" style="display:none">
+          <button class="btn small" id="hsClear">清空</button>
+        </div>
+        <textarea id="hsIn" placeholder="在此粘贴或输入内容，哈希将自动计算…"></textarea>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">哈希结果</span>
+          <span class="meta">输入变化后自动重算</span>
+          <span class="chip" id="hsChip"></span>
+          <span class="spacer"></span>
+          <button class="btn small" id="hsCopyAll">复制全部</button>
+        </div>
+        <div class="hash-list" id="hsList"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">哈希比较</span><span class="meta">忽略大小写与空白</span></div>
+        <div class="row"><label class="field" style="margin:0;width:70px">哈希值 A</label><input type="text" id="hsCmpA"></div>
+        <div class="row mt8"><label class="field" style="margin:0;width:70px">哈希值 B</label><input type="text" id="hsCmpB"></div>
+        <div class="mt8"><span class="chip" id="hsCmpChip"></span></div>
+      </div>
+    </section>
+
+    <!-- ================= 智能解码 ================= -->
+    <section class="page" id="page-smart">
+      <h1>智能解码</h1>
+      <div class="sub">自动尝试「编码 + 压缩」多层链路 · 逐步展示处理过程</div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">输入内容</span>
+          <span class="meta" id="smInMeta">0 字符</span>
+          <span class="spacer"></span>
+          <button class="btn small" id="smClear">清空</button>
+        </div>
+        <textarea id="smIn" placeholder="在此粘贴疑似多层编码的内容…"></textarea>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <label class="field" style="margin:0">最大解码层数</label>
+          <select id="smLayers" style="width:90px"></select>
+          <span class="spacer"></span>
+          <button class="btn primary" id="smRun">开始分析</button>
+        </div>
+        <div class="hint">防压缩炸弹：单次解压输出上限 64 MB；已处理内容不会重复解码</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">解码结果</span>
+          <span class="chip" id="smChip"></span>
+          <span class="spacer"></span>
+          <button class="btn small" id="smCopy">复制结果</button>
+        </div>
+        <div class="meta" id="smChain"></div>
+        <textarea id="smOut" readonly class="mt8" placeholder="结果将显示在这里"></textarea>
+        <div class="steps mt12" id="smSteps"></div>
+      </div>
+    </section>
+
+    <!-- ================= 文件处理 ================= -->
+    <section class="page" id="page-files">
+      <h1>文件处理</h1>
+      <div class="sub">二进制安全读取 · Base64 / Hex 编码 · 多算法校验值 · GZIP 压缩解压</div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">选择文件</span>
+          <span class="meta" id="flMeta">未选择</span>
+          <span class="spacer"></span>
+          <button class="btn" id="flPick">选择文件</button>
+          <input type="file" id="flFile" style="display:none">
+        </div>
+        <div class="row mt8">
+          <label class="field" style="margin:0">操作</label>
+          <select id="flOp" style="width:230px">
+            <option value="base64">Base64 编码</option>
+            <option value="hex">Hex 编码</option>
+            <option value="hash">SHA-256 / MD5 / SHA-1 校验值</option>
+            <option value="gzip">GZIP 压缩（导出 .gz）</option>
+            <option value="gunzip">GZIP 解压（自动识别）</option>
+          </select>
+          <span class="spacer"></span>
+          <button class="btn primary" id="flRun" disabled>开始处理</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">处理结果</span>
+          <span class="chip" id="flChip"></span>
+          <span class="spacer"></span>
+          <button class="btn small" id="flCopy">复制结果</button>
+          <button class="btn small" id="flSave" disabled>保存结果</button>
+        </div>
+        <textarea id="flOut" readonly placeholder="结果将显示在这里"></textarea>
+      </div>
+
+      <div class="banner info">
+        读取始终按字节处理（二进制安全）；文本类结果才尝试 UTF-8 解码。所有计算均在本机浏览器完成。
+      </div>
+    </section>
+
+    <!-- ================= 关于 ================= -->
+    <section class="page" id="page-about">
+      <h1>关于软件</h1>
+      <div class="sub">纯离线运行的浏览器版编码解码工具箱</div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">DevToolkit Web</span>
+          <span class="meta" id="aboutVer"></span>
+        </div>
+        <div class="grid2">
+          <div><span class="meta">运行方式</span><div>单文件 HTML，双击即用</div></div>
+          <div><span class="meta">依赖</span><div>无（零依赖、零网络）</div></div>
+          <div><span class="meta">密码学实现</span><div>浏览器原生 Web Crypto</div></div>
+          <div><span class="meta">环境要求</span><div>Chrome / Edge / Firefox / Safari 现代版本</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">能力对照</span></div>
+        <table>
+          <thead><tr><th>功能</th><th>浏览器版</th></tr></thead>
+          <tbody>
+            <tr><td>12 种编码解码</td><td>全部支持</td></tr>
+            <tr><td>哈希 10 种</td><td>全部支持（MD5 / BLAKE2 纯 JS 实现）</td></tr>
+            <tr><td>AES-GCM / AES-CBC / ChaCha20-Poly1305</td><td>支持，信封格式与桌面版兼容</td></tr>
+            <tr><td>AES-ECB</td><td>不支持（Web Crypto 明确排除该不安全模式）</td></tr>
+            <tr><td>RSA-OAEP / RSA-PSS</td><td>支持（密钥 2048 / 3072 / 4096 位）</td></tr>
+            <tr><td>压缩 GZIP / ZLIB / DEFLATE</td><td>支持（原生 CompressionStream）</td></tr>
+            <tr><td>ZIP / Brotli / Zstd / LZ4</td><td>不支持（浏览器无原生实现）</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">自检</span></div>
+        <div class="row">
+          <button class="btn" id="aboutSelfTest">运行算法自检</button>
+          <span class="chip" id="aboutTestChip"></span>
+        </div>
+        <div class="hint" id="aboutTestDetail"></div>
+      </div>
+
+      <div class="banner ok">
+        完全离线：不联网、不上传、不收集任何数据。所有计算在本地浏览器完成，关闭标签页即彻底清除。
+      </div>
+    </section>
+
+  </div>
+  <div class="statusbar">
+    <span id="status">就绪 · 完全离线运行</span>
+    <span class="spacer"></span>
+    <span id="statusRight">UTF-8 · 离线模式</span>
+  </div>
+</main>
+
+<script>
+/* core.js — 单文件构建用：IIFE 工厂，依赖显式注入，无全局污染 */
+globalThis.DT = globalThis.DT || {};
+globalThis.DT.core = (() => {
+/* DevToolkit Web — 核心算法层（纯浏览器，零依赖，零网络）
+ * 与桌面版 app/core 对齐：相同算法、相同结果、相同错误语义（返回 {ok,data,error}）。
+ */
+
+const ENV_MAGIC = new TextEncoder().encode("DTK1");
+const DEFAULT_ITERATIONS = 210000;
+const MIN_ITERATIONS = 50000;
+const MAX_ITERATIONS = 2000000;
+const MAX_DATA_BYTES = 64 * 1024 * 1024;
+const ALGO_INFO = {
+  "aes-gcm": { name: "AES-GCM", aead: true, nonceLen: 12, sizes: [128, 192, 256], risk: "ok" },
+  "aes-cbc": { name: "AES-CBC", aead: false, ivLen: 16, sizes: [128, 192, 256], risk: "warn" },
+  "aes-ecb": { name: "AES-ECB", aead: false, ivLen: 0, sizes: [128, 192, 256], risk: "err" },
+  "chacha20-poly1305": { name: "ChaCha20-Poly1305", aead: true, nonceLen: 12, sizes: [256], risk: "ok" },
+};
+
+const ok = (data, meta = {}) => ({ ok: true, data, meta });
+const fail = (error, detail = "") => ({ ok: false, data: null, error, detail });
+
+const subtle = () => {
+  if (!globalThis.crypto || !crypto.subtle) {
+    throw new Error("当前浏览器不支持 Web Crypto（需 HTTPS 或 localhost 环境）");
+  }
+  return crypto.subtle;
+};
+
+const utf8 = (s) => new TextEncoder().encode(s);
+const fromUtf8 = (b) => new TextDecoder("utf-8", { fatal: true }).decode(b);
+function hex(bytes) {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+function unhex(s) {
+  const c = s.replace(/\s+/g, "");
+  if (!/^[0-9a-fA-F]*$/.test(c)) throw new Error("输入包含非十六进制字符");
+  if (c.length % 2) throw new Error("十六进制长度必须为偶数");
+  const out = new Uint8Array(c.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(c.substr(i * 2, 2), 16);
+  return out;
+}
+function b64encode(bytes) {
+  let s = "";
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
+}
+function b64decode(s) {
+  const bin = atob(s.replace(/\s+/g, ""));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+const rand = (n) => crypto.getRandomValues(new Uint8Array(n));
+function concat(...arrs) {
+  const total = arrs.reduce((n, a) => n + a.length, 0);
+  const out = new Uint8Array(total);
+  let p = 0;
+  for (const a of arrs) { out.set(a, p); p += a.length; }
+  return out;
+}
+const eqBytes = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+return { ALGO_INFO, DEFAULT_ITERATIONS, ENV_MAGIC, MAX_DATA_BYTES, MAX_ITERATIONS, MIN_ITERATIONS, b64decode, b64encode, concat, eqBytes, fail, fromUtf8, hex, ok, rand, subtle, unhex, utf8 };
+})();
+
+</script>
+<script>
+/* SHA-3（Keccak-f[1600]）纯 JS 实现：Edge/Firefox 的 Web Crypto 不提供 SHA3。
+ * 支持 SHA3-256 / SHA3-512（与 hashlib.sha3_* 一致，padding 0x06）。
+ */
+globalThis.DT = globalThis.DT || {};
+globalThis.DT.sha3 = (() => {
+  const RC = [
+    [0x00000001, 0x00000000], [0x00008082, 0x00000000], [0x0000808a, 0x80000000],
+    [0x80008000, 0x80000000], [0x0000808b, 0x00000000], [0x80000001, 0x00000000],
+    [0x80008081, 0x80000000], [0x00008009, 0x80000000], [0x0000008a, 0x00000000],
+    [0x00000088, 0x00000000], [0x80008009, 0x00000000], [0x8000000a, 0x00000000],
+    [0x8000808b, 0x00000000], [0x0000008b, 0x80000000], [0x00008089, 0x80000000],
+    [0x00008003, 0x80000000], [0x00008002, 0x80000000], [0x00000080, 0x80000000],
+    [0x0000800a, 0x00000000], [0x8000000a, 0x80000000], [0x80008081, 0x80000000],
+    [0x00008080, 0x80000000], [0x80000001, 0x00000000], [0x80008008, 0x80000000],
+  ];
+  const ROT = [
+    [0, 36, 3, 41, 18], [1, 44, 10, 45, 2], [62, 6, 43, 15, 61],
+    [28, 55, 25, 21, 56], [27, 20, 39, 8, 14],
+  ];
+  // 状态用 25 个小端 64 位整数（[lo, hi] 两个 32 位）
+  function rotl(lo, hi, n) {
+    if (n === 0) return [lo, hi];
+    if (n < 32) return [((lo << n) | (hi >>> (32 - n))) >>> 0, ((hi << n) | (lo >>> (32 - n))) >>> 0];
+    if (n === 32) return [hi, lo];
+    const m = n - 32;
+    return [((hi << m) | (lo >>> (32 - m))) >>> 0, ((lo << m) | (hi >>> (32 - m))) >>> 0];
+  }
+  function keccakF(st) {
+    const C = new Array(5), D = new Array(5), B = new Array(25);
+    for (let round = 0; round < 24; round++) {
+      // theta
+      for (let x = 0; x < 5; x++) {
+        C[x] = [st[x][0] ^ st[x + 5][0] ^ st[x + 10][0] ^ st[x + 15][0] ^ st[x + 20][0],
+                st[x][1] ^ st[x + 5][1] ^ st[x + 10][1] ^ st[x + 15][1] ^ st[x + 20][1]];
+      }
+      for (let x = 0; x < 5; x++) {
+        const nx = (x + 1) % 5, px = (x + 4) % 5;
+        const r = rotl(C[nx][0], C[nx][1], 1);
+        D[x] = [C[px][0] ^ r[0], C[px][1] ^ r[1]];
+      }
+      for (let x = 0; x < 5; x++) {
+        for (let y = 0; y < 5; y++) {
+          const i = x + 5 * y;
+          st[i] = [st[i][0] ^ D[x][0], st[i][1] ^ D[x][1]];
+        }
+      }
+      // rho + pi
+      for (let x = 0; x < 5; x++) {
+        for (let y = 0; y < 5; y++) {
+          const i = x + 5 * y;
+          const [lo, hi] = rotl(st[i][0], st[i][1], ROT[x][y]);
+          const nx = y, ny = (2 * x + 3 * y) % 5;
+          B[nx + 5 * ny] = [lo, hi];
+        }
+      }
+      // chi
+      for (let x = 0; x < 5; x++) {
+        for (let y = 0; y < 5; y++) {
+          const i = x + 5 * y;
+          const i1 = ((x + 1) % 5) + 5 * y;
+          const i2 = ((x + 2) % 5) + 5 * y;
+          st[i] = [B[i][0] ^ ((~B[i1][0]) & B[i2][0]) >>> 0,
+                   B[i][1] ^ ((~B[i1][1]) & B[i2][1]) >>> 0];
+        }
+      }
+      // iota
+      st[0] = [(st[0][0] ^ RC[round][0]) >>> 0, (st[0][1] ^ RC[round][1]) >>> 0];
+    }
+  }
+  function keccak(rateBytes, domainPad, data, outLen) {
+    const st = Array.from({ length: 25 }, () => [0, 0]);
+    // 填充：data + domain + 10*1
+    const padded = new Uint8Array(Math.floor(data.length / rateBytes) * rateBytes + rateBytes);
+    padded.set(data);
+    padded[data.length] ^= domainPad;
+    padded[padded.length - 1] ^= 0x80;
+    for (let off = 0; off < padded.length; off += rateBytes) {
+      for (let i = 0; i < rateBytes / 8; i++) {
+        const p = off + i * 8;
+        const lo = (padded[p] | (padded[p+1] << 8) | (padded[p+2] << 16) | (padded[p+3] << 24)) >>> 0;
+        const hi = (padded[p+4] | (padded[p+5] << 8) | (padded[p+6] << 16) | (padded[p+7] << 24)) >>> 0;
+        st[i] = [(st[i][0] ^ lo) >>> 0, (st[i][1] ^ hi) >>> 0];
+      }
+      keccakF(st);
+    }
+    const out = new Uint8Array(outLen);
+    let pos = 0, lane = 0;
+    while (pos < outLen) {
+      for (let i = 0; i < 4 && pos < outLen; i++) {
+        out[pos++] = (st[lane][0] >>> (8 * i)) & 0xff;
+      }
+      for (let i = 0; i < 4 && pos < outLen; i++) {
+        out[pos++] = (st[lane][1] >>> (8 * i)) & 0xff;
+      }
+      lane++;
+      if (lane >= rateBytes / 8 && pos < outLen) {
+        keccakF(st);
+        lane = 0;
+      }
+    }
+    return out;
+  }
+  return {
+    sha3_256: (bytes) => keccak(136, 0x06, bytes, 32),
+    sha3_512: (bytes) => keccak(72, 0x06, bytes, 64),
+  };
+})();
+
+</script>
+<script>
+/* ChaCha20-Poly1305（RFC 8439）纯 JS 实现：Edge 的 Web Crypto 不支持该算法。
+ * 输出格式与 Web Crypto 一致：ciphertext || tag(16)，可直接与桌面版互操作。
+ */
+globalThis.DT = globalThis.DT || {};
+globalThis.DT.chacha = (() => {
+  const rotl = (v, c) => ((v << c) | (v >>> (32 - c))) >>> 0;
+
+  function chachaBlock(key, counter, nonce) {
+    // 初始状态：常量 "expand 32-byte k" + key(8) + counter(1) + nonce(3)
+    const st = new Uint32Array(16);
+    st[0] = 0x61707865; st[1] = 0x3320646e; st[2] = 0x79622d32; st[3] = 0x6b206574;
+    for (let i = 0; i < 8; i++) {
+      st[4 + i] = (key[i*4] | (key[i*4+1] << 8) | (key[i*4+2] << 16) | (key[i*4+3] << 24)) >>> 0;
+    }
+    st[12] = counter >>> 0;
+    for (let i = 0; i < 3; i++) {
+      st[13 + i] = (nonce[i*4] | (nonce[i*4+1] << 8) | (nonce[i*4+2] << 16) | (nonce[i*4+3] << 24)) >>> 0;
+    }
+    const w = new Uint32Array(st);
+    const qr = (a, b, c, d) => {
+      w[a] = (w[a] + w[b]) >>> 0; w[d] = rotl(w[d] ^ w[a], 16);
+      w[c] = (w[c] + w[d]) >>> 0; w[b] = rotl(w[b] ^ w[c], 12);
+      w[a] = (w[a] + w[b]) >>> 0; w[d] = rotl(w[d] ^ w[a], 8);
+      w[c] = (w[c] + w[d]) >>> 0; w[b] = rotl(w[b] ^ w[c], 7);
+    };
+    for (let i = 0; i < 10; i++) {
+      qr(0, 4, 8, 12); qr(1, 5, 9, 13); qr(2, 6, 10, 14); qr(3, 7, 11, 15);
+      qr(0, 5, 10, 15); qr(1, 6, 11, 12); qr(2, 7, 8, 13); qr(3, 4, 9, 14);
+    }
+    const out = new Uint8Array(64);
+    for (let i = 0; i < 16; i++) {
+      const v = (w[i] + st[i]) >>> 0;
+      out[i*4] = v & 0xff; out[i*4+1] = (v >>> 8) & 0xff;
+      out[i*4+2] = (v >>> 16) & 0xff; out[i*4+3] = (v >>> 24) & 0xff;
+    }
+    return out;
+  }
+
+  function poly1305(msg, key) {
+    // key: 32 字节；r = 前 16 字节（clamp），s = 后 16 字节
+    const r = new Uint8Array(16), s = new Uint8Array(16);
+    r.set(key.slice(0, 16)); s.set(key.slice(16, 32));
+    r[3] &= 15; r[7] &= 15; r[11] &= 15; r[15] &= 15;
+    r[4] &= 252; r[8] &= 252; r[12] &= 252;
+    const toBig = (bytes) => {
+      let n = 0n;
+      for (let i = bytes.length - 1; i >= 0; i--) n = (n << 8n) | BigInt(bytes[i]);
+      return n;
+    };
+    const R = toBig(r);
+    const S = toBig(s);
+    const P = (1n << 130n) - 5n;
+    let acc = 0n;
+    for (let i = 0; i < msg.length; i += 16) {
+      const len = Math.min(16, msg.length - i);
+      // 每块后追加 0x01（RFC 8439 §2.5，高位附加而非固定位置）
+      const chunk = new Uint8Array(len + 1);
+      chunk.set(msg.subarray(i, i + len));
+      chunk[len] = 1;
+      acc = ((acc + toBig(chunk)) * R) % P;
+    }
+    acc = (acc + S) & ((1n << 128n) - 1n);
+    const out = new Uint8Array(16);
+    let v = acc;
+    for (let i = 0; i < 16; i++) { out[i] = Number(v & 0xffn); v >>= 8n; }
+    return out;
+  }
+
+  function aeadMacData(aad, ct) {
+    const pad = (n) => (16 - (n % 16)) % 16;
+    const total = aad.length + pad(aad.length) + ct.length + pad(ct.length) + 16;
+    const out = new Uint8Array(total);
+    let p = 0;
+    out.set(aad, p); p += aad.length; p += pad(aad.length);
+    out.set(ct, p); p += ct.length; p += pad(ct.length);
+    const dv = new DataView(out.buffer, p, 16);
+    dv.setBigUint64(0, BigInt(aad.length), true);
+    dv.setBigUint64(8, BigInt(ct.length), true);
+    return out;
+  }
+
+  function encrypt(key, nonce, plaintext, aad = new Uint8Array()) {
+    const otk = chachaBlock(key, 0, nonce).slice(0, 32);
+    const ct = new Uint8Array(plaintext.length);
+    for (let off = 0, counter = 1; off < plaintext.length; off += 64, counter++) {
+      const ks = chachaBlock(key, counter, nonce);
+      for (let i = 0; i < 64 && off + i < plaintext.length; i++) ct[off + i] = plaintext[off + i] ^ ks[i];
+    }
+    const tag = poly1305(aeadMacData(aad, ct), otk);
+    const out = new Uint8Array(ct.length + 16);
+    out.set(ct); out.set(tag, ct.length);
+    return out;
+  }
+
+  function decrypt(key, nonce, ciphertextWithTag, aad = new Uint8Array()) {
+    if (ciphertextWithTag.length < 16) throw new Error("密文过短");
+    const ct = ciphertextWithTag.slice(0, ciphertextWithTag.length - 16);
+    const tag = ciphertextWithTag.slice(ciphertextWithTag.length - 16);
+    const otk = chachaBlock(key, 0, nonce).slice(0, 32);
+    const expect = poly1305(aeadMacData(aad, ct), otk);
+    let diff = 0;
+    for (let i = 0; i < 16; i++) diff |= expect[i] ^ tag[i];
+    if (diff !== 0) throw new Error("认证失败");
+    const pt = new Uint8Array(ct.length);
+    for (let off = 0, counter = 1; off < ct.length; off += 64, counter++) {
+      const ks = chachaBlock(key, counter, nonce);
+      for (let i = 0; i < 64 && off + i < ct.length; i++) pt[off + i] = ct[off + i] ^ ks[i];
+    }
+    return pt;
+  }
+
+  return { encrypt, decrypt, chachaBlock, poly1305 };
+})();
+
+</script>
+<script>
+/* codecs.js — 单文件构建用：IIFE 工厂，依赖显式注入，无全局污染 */
+globalThis.DT = globalThis.DT || {};
+globalThis.DT.codecs = (({ ok, fail, utf8, fromUtf8, unhex }) => {
+/* 编码 / 解码：与桌面版 12 种编解码器对齐。
+ * Web Crypto 只有 base64 辅助，其余用纯 JS 实现（浏览器语义与 Python 保持一致）。
+ */
+
+const B58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+const B62_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const B58_B62_MAX_CHARS = 32000;
+const MAX_INPUT_CHARS = 8_000_000;
+
+const guard = (text) => {
+  if (text == null) return fail("输入为空：请输入待处理内容");
+  if (text.length > MAX_INPUT_CHARS) {
+    return fail(`输入过大（${text.length.toLocaleString()} 字符，超过 8 MB 上限）`);
+  }
+  return null;
+};
+const stripWs = (s) => s.replace(/\s+/g, "");
+
+/* ---------------- Base64 ---------------- */
+function b64Encode(text, { urlsafe = false, charset = "utf-8", wrap = 0 } = {}) {
+  const g = guard(text); if (g) return g;
+  let bytes;
+  try { bytes = encodeText(text, charset); } catch (e) { return fail(e.message); }
+  let out = bytesToB64(bytes);
+  if (urlsafe) out = out.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  if (wrap > 0) out = out.replace(new RegExp(`(.{${wrap}})`, "g"), "$1\n").replace(/\n$/, "");
+  return ok(out, { in_bytes: bytes.length, out_chars: out.length });
+}
+function b64Decode(text, { urlsafe = false, charset = "utf-8" } = {}) {
+  const g = guard(text); if (g) return g;
+  const compact = stripWs(text);
+  if (!compact) return ok("");
+  const allowed = urlsafe ? /^[A-Za-z0-9\-_]+={0,2}$/ : /^[A-Za-z0-9+/]+={0,2}$/;
+  if (!allowed.test(compact)) {
+    return fail(`输入包含非 ${urlsafe ? "Base64 URL Safe" : "Base64"} 字符`);
+  }
+  if (compact.replace(/=/g, "").length % 4 === 1) return fail("长度不合法：不能是 4n+1");
+  let s = compact.replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  let bytes;
+  try { bytes = unB64(s); } catch { return fail("Base64 解码失败"); }
+  try { return ok(decodeText(bytes, charset), { in_bytes: compact.length, out_bytes: bytes.length }); }
+  catch { return fail(`解码结果不是有效的 ${charset} 文本（输入可能不是文本数据或字符集选错）`); }
+}
+
+/* ---------------- Base32 ---------------- */
+const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+function b32Encode(text, { charset = "utf-8" } = {}) {
+  const g = guard(text); if (g) return g;
+  let bytes;
+  try { bytes = encodeText(text, charset); } catch (e) { return fail(e.message); }
+  let bits = 0, value = 0, out = "";
+  for (const b of bytes) {
+    value = (value << 8) | b; bits += 8;
+    while (bits >= 5) { out += B32[(value >>> (bits - 5)) & 31]; bits -= 5; }
+  }
+  if (bits > 0) out += B32[(value << (5 - bits)) & 31];
+  while (out.length % 8) out += "=";
+  return ok(out, { in_bytes: bytes.length, out_chars: out.length });
+}
+function b32Decode(text, { charset = "utf-8" } = {}) {
+  const g = guard(text); if (g) return g;
+  const c = stripWs(text).toUpperCase();
+  if (!c) return ok("");
+  if (!/^[A-Z2-7]+={0,6}$/.test(c)) return fail("输入包含非 Base32 字符。字母表为 A–Z 2–7，= 作为填充");
+  const body = c.replace(/=+$/, "");
+  let bits = 0, value = 0;
+  const out = [];
+  for (const ch of body) {
+    const idx = B32.indexOf(ch);
+    if (idx < 0) return fail("Base32 解码失败");
+    value = (value << 5) | idx; bits += 5;
+    if (bits >= 8) { out.push((value >>> (bits - 8)) & 0xff); bits -= 8; }
+  }
+  const bytes = new Uint8Array(out);
+  try { return ok(decodeText(bytes, charset), { in_bytes: c.length, out_bytes: bytes.length }); }
+  catch { return fail(`解码结果不是有效的 ${charset} 文本`); }
+}
+
+/* ---------------- Hex ---------------- */
+function hexEncode(text, { charset = "utf-8", upper = false, sep = false } = {}) {
+  const g = guard(text); if (g) return g;
+  let bytes;
+  try { bytes = encodeText(text, charset); } catch (e) { return fail(e.message); }
+  let body = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  if (upper) body = body.toUpperCase();
+  const out = sep ? body.replace(/(..)(?=.)/g, "$1 ") : body;
+  return ok(out, { in_bytes: bytes.length, out_chars: out.length });
+}
+function hexDecode(text, { charset = "utf-8" } = {}) {
+  const g = guard(text); if (g) return g;
+  let c = stripWs(text).replace(/0x/gi, "");
+  if (!c) return ok("");
+  if (!/^[0-9a-fA-F]+$/.test(c)) {
+    const bad = [...c].find((ch) => !/[0-9a-fA-F]/.test(ch)) ?? "?";
+    return fail(`输入包含非十六进制字符（「${bad}」）。仅允许 0–9 A–F`);
+  }
+  if (c.length % 2) return fail("十六进制长度必须为偶数（每字节两位）");
+  const bytes = unhex(c);
+  try { return ok(decodeText(bytes, charset), { in_bytes: bytes.length, out_bytes: bytes.length }); }
+  catch { return fail(`解码结果不是有效的 ${charset} 文本`); }
+}
+
+/* ---------------- Base58 / Base62（BigInt，平方级复杂度，有上限保护） ---------------- */
+function baseNEncode(bytes, alphabet) {
+  const base = BigInt(alphabet.length);
+  let num = 0n;
+  for (const b of bytes) num = num * 256n + BigInt(b);
+  let out = "";
+  while (num > 0n) { out = alphabet[Number(num % base)] + out; num /= base; }
+  for (const b of bytes) { if (b === 0) out = alphabet[0] + out; else break; }
+  return out;
+}
+function baseNDecode(str, alphabet) {
+  const base = BigInt(alphabet.length);
+  const idx = new Map([...alphabet].map((ch, i) => [ch, BigInt(i)]));
+  let num = 0n;
+  for (const ch of str) {
+    const v = idx.get(ch);
+    if (v === undefined) throw new Error(`输入包含非该字母表字符（「${ch}」）`);
+    num = num * base + v;
+  }
+  const hexStr = num === 0n ? "" : num.toString(16);
+  const padded = hexStr.length % 2 ? "0" + hexStr : hexStr;
+  const body = padded ? unhex(padded) : new Uint8Array();
+  let zeros = 0;
+  for (const ch of str) { if (ch === alphabet[0]) zeros++; else break; }
+  const out = new Uint8Array(zeros + body.length);
+  out.set(body, zeros);
+  return out;
+}
+function b58Encode(text, { charset = "utf-8" } = {}) {
+  const g = guard(text); if (g) return g;
+  if (text.length > B58_B62_MAX_CHARS) return fail(`输入过大：Base58 上限 ${B58_B62_MAX_CHARS.toLocaleString()} 字符`);
+  let bytes; try { bytes = encodeText(text, charset); } catch (e) { return fail(e.message); }
+  const out = baseNEncode(bytes, B58_ALPHABET);
+  return ok(out, { in_bytes: bytes.length, out_chars: out.length });
+}
+function b58Decode(text, { charset = "utf-8" } = {}) {
+  const g = guard(text); if (g) return g;
+  const s = text.trim();
+  if (!s) return ok("");
+  if (s.length > B58_B62_MAX_CHARS) return fail(`输入过大：Base58 上限 ${B58_B62_MAX_CHARS.toLocaleString()} 字符`);
+  let bytes; try { bytes = baseNDecode(s, B58_ALPHABET); } catch (e) { return fail(e.message); }
+  try { return ok(decodeText(bytes, charset), { in_bytes: s.length, out_bytes: bytes.length }); }
+  catch { return fail(`解码结果不是有效的 ${charset} 文本`); }
+}
+function b62Encode(text, { charset = "utf-8" } = {}) {
+  const g = guard(text); if (g) return g;
+  if (text.length > B58_B62_MAX_CHARS) return fail(`输入过大：Base62 上限 ${B58_B62_MAX_CHARS.toLocaleString()} 字符`);
+  let bytes; try { bytes = encodeText(text, charset); } catch (e) { return fail(e.message); }
+  const out = baseNEncode(bytes, B62_ALPHABET);
+  return ok(out, { in_bytes: bytes.length, out_chars: out.length });
+}
+function b62Decode(text, { charset = "utf-8" } = {}) {
+  const g = guard(text); if (g) return g;
+  const s = text.trim();
+  if (!s) return ok("");
+  if (s.length > B58_B62_MAX_CHARS) return fail(`输入过大：Base62 上限 ${B58_B62_MAX_CHARS.toLocaleString()} 字符`);
+  let bytes; try { bytes = baseNDecode(s, B62_ALPHABET); } catch (e) { return fail(e.message); }
+  try { return ok(decodeText(bytes, charset), { in_bytes: s.length, out_bytes: bytes.length }); }
+  catch { return fail(`解码结果不是有效的 ${charset} 文本`); }
+}
+
+/* ---------------- URL / HTML / Unicode / ASCII / ROT13 / QP ---------------- */
+function urlEncode(text, { keepSlash = true, plusSpace = false } = {}) {
+  const g = guard(text); if (g) return g;
+  let out = encodeURIComponent(text);
+  if (keepSlash) out = out.replace(/%2F/g, "/");
+  // encodeURIComponent 已把空格编码为 %20
+  if (plusSpace) out = out.replace(/%20/g, "+");
+  return ok(out, { in_bytes: utf8(text).length, out_chars: out.length });
+}
+function urlDecode(text) {
+  const g = guard(text); if (g) return g;
+  const s = text.trim();
+  if (!s) return ok("");
+  try {
+    const out = decodeURIComponent(s.replace(/\+/g, " "));
+    return ok(out, { in_bytes: s.length, out_chars: out.length });
+  } catch {
+    return fail("URL 解码失败：存在无效的百分号序列或不完整的 UTF-8 编码");
+  }
+}
+const HTML_ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#x27;" };
+function htmlEncode(text, { entity = "hex", namedOnly = false } = {}) {
+  const g = guard(text); if (g) return g;
+  let out = "";
+  for (const ch of text) {
+    if (HTML_ESC[ch]) { out += HTML_ESC[ch]; continue; }
+    const cp = ch.codePointAt(0);
+    if (cp > 127 && !namedOnly) {
+      out += entity === "dec" ? `&#${cp};` : `&#x${cp.toString(16)};`;
+    } else out += ch;
+  }
+  return ok(out, { in_bytes: utf8(text).length, out_chars: out.length });
+}
+function htmlDecode(text) {
+  const g = guard(text); if (g) return g;
+  const s = text.trim();
+  if (!s) return ok("");
+  let out;
+  if (typeof document !== "undefined") {
+    const tmp = document.createElement("textarea");
+    tmp.innerHTML = s;
+    out = tmp.value;
+    tmp.remove();
+  } else {
+    // 无 DOM 环境（Node / Worker）：常用命名实体 + 数字实体
+    const NAMED = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+    out = s.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (m, body) => {
+      if (body[0] === "#") {
+        const cp = body[1] === "x" || body[1] === "X"
+          ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
+        return Number.isFinite(cp) && cp >= 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : m;
+      }
+      return NAMED[body.toLowerCase()] ?? m;
+    });
+  }
+  return ok(out, { in_bytes: s.length, out_chars: out.length });
+}
+function unicodeEncode(text, { upper = false } = {}) {
+  const g = guard(text); if (g) return g;
+  let out = "";
+  for (const ch of text) {
+    const cp = ch.codePointAt(0);
+    if (cp > 0xFFFF) {
+      // 超出 BMP：按 UTF-16 代理对输出两个 \uXXXX（与桌面版 / JSON 语义一致）
+      const v = cp - 0x10000;
+      const hi = 0xD800 + (v >> 10), lo = 0xDC00 + (v & 0x3FF);
+      let hs = hi.toString(16).padStart(4, "0");
+      let ls = lo.toString(16).padStart(4, "0");
+      if (upper) { hs = hs.toUpperCase(); ls = ls.toUpperCase(); }
+      out += "\\u" + hs + "\\u" + ls;
+    } else if (cp > 127) {
+      let h = cp.toString(16).padStart(4, "0");
+      if (upper) h = h.toUpperCase();
+      out += "\\u" + h;
+    } else out += ch;
+  }
+  return ok(out, { in_bytes: utf8(text).length, out_chars: out.length });
+}
+function unicodeDecode(text) {
+  const g = guard(text); if (g) return g;
+  if (!text.trim()) return ok("");
+  const bad = /\\u(?![0-9a-fA-F]{4})/.exec(text);
+  if (bad) return fail("Unicode 解码失败：存在无效的 \\u 序列（\\u 后必须跟 4 位十六进制）");
+  try {
+    const out = text.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+    return ok(out, { in_bytes: text.length, out_chars: out.length });
+  } catch { return fail("Unicode 解码失败"); }
+}
+function asciiEncode(text, { hexMode = false } = {}) {
+  const g = guard(text); if (g) return g;
+  const parts = [];
+  let i = 0;
+  for (const ch of text) {
+    const cp = ch.codePointAt(0);
+    if (cp > 127) {
+      return fail(`第 ${i + 1} 个字符「${ch}」超出 ASCII 范围（0–127）。中文字符请改用 Hex 或 Base64`);
+    }
+    parts.push(hexMode ? "0x" + cp.toString(16).toUpperCase().padStart(2, "0") : String(cp));
+    i++;
+  }
+  const out = parts.join(" ");
+  return ok(out, { in_bytes: text.length, out_chars: out.length });
+}
+function asciiDecode(text) {
+  const g = guard(text); if (g) return g;
+  const s = text.trim();
+  if (!s) return ok("");
+  const tokens = s.split(/[\s,]+/).filter(Boolean);
+  const out = [];
+  for (const t of tokens) {
+    let v;
+    if (/^0x[0-9a-fA-F]+$/.test(t)) v = parseInt(t.slice(2), 16);
+    else if (/^[0-9]+$/.test(t)) v = parseInt(t, 10);
+    else return fail(`「${t}」不是有效的十进制 / 十六进制码点数值`);
+    if (v < 0 || v > 127) return fail(`「${t}」超出 ASCII 范围（0–127）`);
+    out.push(String.fromCharCode(v));
+  }
+  const decoded = out.join("");
+  return ok(decoded, { in_bytes: s.length, out_chars: decoded.length });
+}
+function rot13(text) {
+  const g = guard(text); if (g) return g;
+  let out = "";
+  for (const ch of text) {
+    const c = ch.charCodeAt(0);
+    if (c >= 65 && c <= 90) out += String.fromCharCode(((c - 65 + 13) % 26) + 65);
+    else if (c >= 97 && c <= 122) out += String.fromCharCode(((c - 97 + 13) % 26) + 97);
+    else out += ch;
+  }
+  return ok(out, { in_bytes: utf8(text).length, out_chars: out.length });
+}
+function qpEncode(text, { charset = "utf-8" } = {}) {
+  const g = guard(text); if (g) return g;
+  let bytes; try { bytes = encodeText(text, charset); } catch (e) { return fail(e.message); }
+  let out = "";
+  let lineLen = 0;
+  const push = (tok) => {
+    if (lineLen + tok.length > 75) { out += "=\r\n"; lineLen = 0; }
+    out += tok; lineLen += tok.length;
+  };
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i];
+    if (b === 0x0d && bytes[i + 1] === 0x0a) { out += "\r\n"; lineLen = 0; i++; continue; }
+    const printable = (b >= 33 && b <= 126 && b !== 61) || b === 32 || b === 9;
+    if (printable) {
+      if (b === 32 || b === 9) {
+        const atEol = i + 1 >= bytes.length || bytes[i + 1] === 0x0d || bytes[i + 1] === 0x0a;
+        push(atEol ? "=" + b.toString(16).toUpperCase().padStart(2, "0") : String.fromCharCode(b));
+      } else push(String.fromCharCode(b));
+    } else {
+      push("=" + b.toString(16).toUpperCase().padStart(2, "0"));
+    }
+  }
+  return ok(out, { in_bytes: bytes.length, out_chars: out.length });
+}
+function qpDecode(text, { charset = "utf-8" } = {}) {
+  const g = guard(text); if (g) return g;
+  if (!text.trim()) return ok("");
+  if (/[^\x00-\x7F]/.test(text)) return fail("QP 解码失败：输入包含非 ASCII 字符");
+  const cleaned = text.replace(/=\r?\n/g, "").replace(/[ \t]+$/gm, "");
+  const out = [];
+  for (let i = 0; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    if (ch === "=") {
+      const h = cleaned.substr(i + 1, 2);
+      if (!/^[0-9a-fA-F]{2}$/.test(h)) return fail("QP 解码失败：无效的 =XX 序列");
+      out.push(parseInt(h, 16)); i += 2;
+    } else out.push(ch.charCodeAt(0) & 0xff);
+  }
+  const bytes = new Uint8Array(out);
+  try { return ok(decodeText(bytes, charset), { in_bytes: text.length, out_bytes: bytes.length }); }
+  catch { return fail(`解码结果不是有效的 ${charset} 文本`); }
+}
+
+/* ---------------- 字符集与 base64 内部工具 ---------------- */
+function bytesToB64(bytes) {
+  let s = "";
+  const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH) {
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  }
+  return btoa(s);
+}
+function unB64(s) {
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function encodeText(text, charset) {
+  const cs = (charset || "utf-8").toLowerCase();
+  if (cs === "utf-8" || cs === "utf8") return utf8(text);
+  // 浏览器 TextEncoder 仅支持 UTF-8：GBK 等用 TextDecoder 反向验证后降级提示
+  throw new Error(`浏览器仅支持 UTF-8 字符集（当前选择 ${charset}）`);
+}
+function decodeText(bytes, charset) {
+  const cs = (charset || "utf-8").toLowerCase();
+  if (cs === "utf-8" || cs === "utf8") return fromUtf8(bytes);
+  try {
+    return new TextDecoder(charset).decode(bytes);
+  } catch {
+    throw new Error(`不支持的字符集：${charset}`);
+  }
+}
+
+const CODECS = {
+  base64: { name: "Base64（标准）", encode: (t) => b64Encode(t), decode: (t) => b64Decode(t) },
+  base64url: { name: "Base64 URL Safe", encode: (t) => b64Encode(t, { urlsafe: true }), decode: (t) => b64Decode(t, { urlsafe: true }) },
+  base32: { name: "Base32", encode: b32Encode, decode: b32Decode },
+  hex: { name: "Base16 / Hex", encode: hexEncode, decode: hexDecode },
+  base58: { name: "Base58", encode: b58Encode, decode: b58Decode },
+  base62: { name: "Base62", encode: b62Encode, decode: b62Decode },
+  url: { name: "URL 编码", encode: urlEncode, decode: urlDecode },
+  html: { name: "HTML 实体", encode: htmlEncode, decode: htmlDecode },
+  unicode: { name: "Unicode 转义", encode: unicodeEncode, decode: unicodeDecode },
+  ascii: { name: "ASCII", encode: asciiEncode, decode: asciiDecode },
+  rot13: { name: "ROT13", encode: rot13, decode: rot13 },
+  qp: { name: "Quoted-Printable", encode: qpEncode, decode: qpDecode },
+};
+const CODEC_ORDER = Object.keys(CODECS);
+function runCodec(id, direction, text, params = {}) {
+  const c = CODECS[id];
+  if (!c) return fail(`未知算法：${id}`);
+  try { return c[direction](text, params); }
+  catch (e) { return fail(`处理失败：${e.message}`); }
+}
+
+return { CODECS, CODEC_ORDER, runCodec, b64Encode, b64Decode, b32Encode, b32Decode, hexEncode, hexDecode, b58Encode, b58Decode, b62Encode, b62Decode, urlEncode, urlDecode, htmlEncode, htmlDecode, unicodeEncode, unicodeDecode, asciiEncode, asciiDecode, rot13, qpEncode, qpDecode, MAX_INPUT_CHARS, B58_B62_MAX_CHARS };
+})(globalThis.DT.core);
+
+</script>
+<script>
+/* hash.js — 单文件构建用：IIFE 工厂，依赖显式注入，无全局污染 */
+globalThis.DT = globalThis.DT || {};
+globalThis.DT.hash = (({ ok, fail, utf8, hex, sha3 }) => {
+/* 哈希：与桌面版 10 种算法对齐。
+ * SHA-1/224/256/384/512、SHA3-256/512 由 Web Crypto 原生提供；
+ * MD5、BLAKE2b-512、BLAKE2s-256 用纯 JS 实现（浏览器不提供）。
+ */
+
+const HASH_ALGOS = [
+  ["md5", "MD5", "128 位 · 已不安全，仅用于非安全场景校验"],
+  ["sha1", "SHA-1", "160 位 · 已不安全，仅用于非安全场景校验"],
+  ["sha224", "SHA-224", "224 位"],
+  ["sha256", "SHA-256", "256 位 · 推荐"],
+  ["sha384", "SHA-384", "384 位"],
+  ["sha512", "SHA-512", "512 位 · 推荐"],
+  ["sha3_256", "SHA3-256", "256 位"],
+  ["sha3_512", "SHA3-512", "512 位"],
+  ["blake2b", "BLAKE2b-512", "512 位"],
+  ["blake2s", "BLAKE2s-256", "256 位"],
+];
+const ALGO_IDS = HASH_ALGOS.map((a) => a[0]);
+const NATIVE = {
+  sha1: "SHA-1", sha224: "SHA-224", sha256: "SHA-256",
+  sha384: "SHA-384", sha512: "SHA-512",
+};
+const MAX_TEXT_CHARS = 8_000_000;
+
+/* ---------------- MD5 ---------------- */
+function md5(bytes) {
+  const K = new Uint32Array(64);
+  for (let i = 0; i < 64; i++) K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296) >>> 0;
+  const S = [7,12,17,22,7,12,17,22,7,12,17,22,7,12,17,22,
+             5,9,14,20,5,9,14,20,5,9,14,20,5,9,14,20,
+             4,11,16,23,4,11,16,23,4,11,16,23,4,11,16,23,
+             6,10,15,21,6,10,15,21,6,10,15,21,6,10,15,21];
+  const len = bytes.length;
+  const withPad = new Uint8Array((((len + 8) >>> 6) + 1) * 64);
+  withPad.set(bytes);
+  withPad[len] = 0x80;
+  const bitLenLo = (len * 8) >>> 0;
+  const bitLenHi = Math.floor(len / 536870912) >>> 0;
+  const dv = new DataView(withPad.buffer);
+  dv.setUint32(withPad.length - 8, bitLenLo, true);
+  dv.setUint32(withPad.length - 4, bitLenHi, true);
+  let a0 = 0x67452301, b0 = 0xefcdab89, c0 = 0x98badcfe, d0 = 0x10325476;
+  const M = new Uint32Array(16);
+  for (let off = 0; off < withPad.length; off += 64) {
+    for (let j = 0; j < 16; j++) M[j] = dv.getUint32(off + j * 4, true);
+    let A = a0, B = b0, C = c0, D = d0;
+    for (let i = 0; i < 64; i++) {
+      let F, g;
+      if (i < 16) { F = (B & C) | (~B & D); g = i; }
+      else if (i < 32) { F = (D & B) | (~D & C); g = (5 * i + 1) % 16; }
+      else if (i < 48) { F = B ^ C ^ D; g = (3 * i + 5) % 16; }
+      else { F = C ^ (B | ~D); g = (7 * i) % 16; }
+      F = (F + A + K[i] + M[g]) >>> 0;
+      A = D; D = C; C = B;
+      B = (B + ((F << S[i]) | (F >>> (32 - S[i])))) >>> 0;
+    }
+    a0 = (a0 + A) >>> 0; b0 = (b0 + B) >>> 0; c0 = (c0 + C) >>> 0; d0 = (d0 + D) >>> 0;
+  }
+  const out = new Uint8Array(16);
+  const ov = new DataView(out.buffer);
+  ov.setUint32(0, a0, true); ov.setUint32(4, b0, true);
+  ov.setUint32(8, c0, true); ov.setUint32(12, d0, true);
+  return out;
+}
+
+/* ---------------- BLAKE2b（64 位，BigInt 版） ---------------- */
+const M64 = (1n << 64n) - 1n;
+const B2B_IV = [
+  0x6a09e667f3bcc908n, 0xbb67ae8584caa73bn, 0x3c6ef372fe94f82bn, 0xa54ff53a5f1d36f1n,
+  0x510e527fade682d1n, 0x9b05688c2b3e6c1fn, 0x1f83d9abfb41bd6bn, 0x5be0cd19137e2179n,
+];
+const B2B_SIGMA = [
+  [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],
+  [14,10,4,8,9,15,13,6,1,12,0,2,11,7,5,3],
+  [11,8,12,0,5,2,15,13,10,14,3,6,7,1,9,4],
+  [7,9,3,1,13,12,11,14,2,6,5,10,4,0,15,8],
+  [9,0,5,7,2,4,10,15,14,1,11,12,6,8,3,13],
+  [2,12,6,10,0,11,8,3,4,13,7,5,15,14,1,9],
+  [12,5,1,15,14,13,4,10,0,7,6,3,9,2,8,11],
+  [13,11,7,14,12,1,3,9,5,0,15,4,8,6,2,10],
+  [6,15,14,9,11,3,0,8,12,2,13,7,1,4,10,5],
+  [10,2,8,4,7,6,1,5,15,11,9,14,3,12,13,0],
+  [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],
+  [14,10,4,8,9,15,13,6,1,12,0,2,11,7,5,3],
+];
+const rotr64 = (x, n) => ((x >> BigInt(n)) | (x << BigInt(64 - n))) & M64;
+function blake2b(bytes, outLen = 64) {
+  const h = B2B_IV.slice();
+  h[0] ^= 0x01010000n ^ BigInt(outLen);
+  const BLOCK = 128;
+  let t = 0n;
+  const compress = (block, last) => {
+    const m = [];
+    const dv = new DataView(block.buffer, block.byteOffset, block.byteLength);
+    for (let i = 0; i < 16; i++) m.push(dv.getBigUint64(i * 8, true));
+    const v = h.concat(B2B_IV.slice(0, 8));
+    v[12] ^= t & M64;
+    v[13] ^= (t >> 64n) & M64;
+    if (last) v[14] = ~v[14] & M64;
+    const G = (a, b, c, d, x, y) => {
+      v[a] = (v[a] + v[b] + x) & M64;
+      v[d] = rotr64(v[d] ^ v[a], 32);
+      v[c] = (v[c] + v[d]) & M64;
+      v[b] = rotr64(v[b] ^ v[c], 24);
+      v[a] = (v[a] + v[b] + y) & M64;
+      v[d] = rotr64(v[d] ^ v[a], 16);
+      v[c] = (v[c] + v[d]) & M64;
+      v[b] = rotr64(v[b] ^ v[c], 63);
+    };
+    for (let r = 0; r < 12; r++) {
+      const s = B2B_SIGMA[r];
+      G(0, 4, 8, 12, m[s[0]], m[s[1]]);
+      G(1, 5, 9, 13, m[s[2]], m[s[3]]);
+      G(2, 6, 10, 14, m[s[4]], m[s[5]]);
+      G(3, 7, 11, 15, m[s[6]], m[s[7]]);
+      G(0, 5, 10, 15, m[s[8]], m[s[9]]);
+      G(1, 6, 11, 12, m[s[10]], m[s[11]]);
+      G(2, 7, 8, 13, m[s[12]], m[s[13]]);
+      G(3, 4, 9, 14, m[s[14]], m[s[15]]);
+    }
+    for (let i = 0; i < 8; i++) h[i] = h[i] ^ v[i] ^ v[i + 8];
+  };
+  let pos = 0;
+  while (bytes.length - pos > BLOCK) {
+    t += BigInt(BLOCK);
+    compress(bytes.subarray(pos, pos + BLOCK), false);
+    pos += BLOCK;
+  }
+  const lastBlock = new Uint8Array(BLOCK);
+  const rest = bytes.subarray(pos);
+  lastBlock.set(rest);
+  t += BigInt(rest.length);
+  compress(lastBlock, true);
+  const out = new Uint8Array(outLen);
+  const odv = new DataView(out.buffer);
+  for (let i = 0; i < outLen / 8; i++) odv.setBigUint64(i * 8, h[i], true);
+  return out;
+}
+
+/* ---------------- BLAKE2s（32 位） ---------------- */
+const B2S_IV = new Uint32Array([
+  0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+  0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+]);
+const rotr32 = (x, n) => ((x >>> n) | (x << (32 - n))) >>> 0;
+function blake2s(bytes, outLen = 32) {
+  const h = new Uint32Array(B2S_IV);
+  h[0] ^= 0x01010000 ^ outLen;
+  const BLOCK = 64;
+  let t = 0;
+  const compress = (block, last) => {
+    const m = new Uint32Array(16);
+    const dv = new DataView(block.buffer, block.byteOffset, block.byteLength);
+    for (let i = 0; i < 16; i++) m[i] = dv.getUint32(i * 4, true);
+    const v = new Uint32Array(16);
+    v.set(h, 0); v.set(B2S_IV, 8);
+    v[12] ^= t >>> 0;
+    v[13] ^= Math.floor(t / 4294967296) >>> 0;
+    if (last) v[14] = ~v[14] >>> 0;
+    const G = (a, b, c, d, x, y) => {
+      v[a] = (v[a] + v[b] + x) >>> 0;
+      v[d] = rotr32(v[d] ^ v[a], 16);
+      v[c] = (v[c] + v[d]) >>> 0;
+      v[b] = rotr32(v[b] ^ v[c], 12);
+      v[a] = (v[a] + v[b] + y) >>> 0;
+      v[d] = rotr32(v[d] ^ v[a], 8);
+      v[c] = (v[c] + v[d]) >>> 0;
+      v[b] = rotr32(v[b] ^ v[c], 7);
+    };
+    for (let r = 0; r < 10; r++) {
+      const s = B2B_SIGMA[r];
+      G(0, 4, 8, 12, m[s[0]], m[s[1]]);
+      G(1, 5, 9, 13, m[s[2]], m[s[3]]);
+      G(2, 6, 10, 14, m[s[4]], m[s[5]]);
+      G(3, 7, 11, 15, m[s[6]], m[s[7]]);
+      G(0, 5, 10, 15, m[s[8]], m[s[9]]);
+      G(1, 6, 11, 12, m[s[10]], m[s[11]]);
+      G(2, 7, 8, 13, m[s[12]], m[s[13]]);
+      G(3, 4, 9, 14, m[s[14]], m[s[15]]);
+    }
+    for (let i = 0; i < 8; i++) h[i] ^= v[i] ^ v[i + 8];
+  };
+  let pos = 0;
+  while (bytes.length - pos > BLOCK) {
+    t += BLOCK;
+    compress(bytes.subarray(pos, pos + BLOCK), false);
+    pos += BLOCK;
+  }
+  const lastBlock = new Uint8Array(BLOCK);
+  const rest = bytes.subarray(pos);
+  lastBlock.set(rest);
+  t += rest.length;
+  compress(lastBlock, true);
+  const out = new Uint8Array(outLen);
+  const odv = new DataView(out.buffer);
+  for (let i = 0; i < outLen / 4; i++) odv.setUint32(i * 4, h[i], true);
+  return out;
+}
+
+/* ---------------- SHA-224（Web Crypto 对 SHA-224 支持不一致，纯 JS 兜底） ---------------- */
+const SHA256_K = new Uint32Array([
+  0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+  0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+  0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+  0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+  0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+  0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+  0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+  0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2,
+]);
+function sha224(bytes) {
+  const H224 = new Uint32Array([
+    0xc1059ed8,0x367cd507,0x3070dd17,0xf70e5939,0xffc00b31,0x68581511,0x64f98fa7,0xbefa4fa4,
+  ]);
+  // 复用 sha256 压缩函数：临时替换初始值
+  const h = sha256WithIV(bytes, H224);
+  const out = new Uint8Array(28);
+  const dv = new DataView(out.buffer);
+  for (let i = 0; i < 7; i++) dv.setUint32(i * 4, h[i], false);
+  return out;
+}
+function sha256WithIV(bytes, iv) {
+  const len = bytes.length;
+  const padLen = (((len + 8) >>> 6) + 1) * 64;
+  const buf = new Uint8Array(padLen);
+  buf.set(bytes);
+  buf[len] = 0x80;
+  const dv = new DataView(buf.buffer);
+  dv.setUint32(padLen - 8, Math.floor(len / 536870912) >>> 0, false);
+  dv.setUint32(padLen - 4, (len * 8) >>> 0, false);
+  const h = new Uint32Array(iv);
+  const w = new Uint32Array(64);
+  const rr = (x, n) => ((x >>> n) | (x << (32 - n))) >>> 0;
+  for (let off = 0; off < padLen; off += 64) {
+    for (let i = 0; i < 16; i++) w[i] = dv.getUint32(off + i * 4, false);
+    for (let i = 16; i < 64; i++) {
+      const s0 = (rr(w[i-15],7) ^ rr(w[i-15],18) ^ (w[i-15] >>> 3)) >>> 0;
+      const s1 = (rr(w[i-2],17) ^ rr(w[i-2],19) ^ (w[i-2] >>> 10)) >>> 0;
+      w[i] = (w[i-16] + s0 + w[i-7] + s1) >>> 0;
+    }
+    let [a,b,c,d,e,f,g,hh] = h;
+    for (let i = 0; i < 64; i++) {
+      const S1 = (rr(e,6) ^ rr(e,11) ^ rr(e,25)) >>> 0;
+      const ch = ((e & f) ^ (~e & g)) >>> 0;
+      const t1 = (hh + S1 + ch + SHA256_K[i] + w[i]) >>> 0;
+      const S0 = (rr(a,2) ^ rr(a,13) ^ rr(a,22)) >>> 0;
+      const mj = ((a & b) ^ (a & c) ^ (b & c)) >>> 0;
+      const t2 = (S0 + mj) >>> 0;
+      hh = g; g = f; f = e; e = (d + t1) >>> 0;
+      d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+    }
+    h[0] = (h[0] + a) >>> 0; h[1] = (h[1] + b) >>> 0;
+    h[2] = (h[2] + c) >>> 0; h[3] = (h[3] + d) >>> 0;
+    h[4] = (h[4] + e) >>> 0; h[5] = (h[5] + f) >>> 0;
+    h[6] = (h[6] + g) >>> 0; h[7] = (h[7] + hh) >>> 0;
+  }
+  return h;
+}
+
+/* ---------------- 对外接口 ---------------- */
+async function digestOne(algo, bytes) {
+  if (algo === "md5") return md5(bytes);
+  if (algo === "sha224") return sha224(bytes);
+  if (algo === "sha3_256") return sha3.sha3_256(bytes);
+  if (algo === "sha3_512") return sha3.sha3_512(bytes);
+  if (algo === "blake2b") return blake2b(bytes, 64);
+  if (algo === "blake2s") return blake2s(bytes, 32);
+  const alg = NATIVE[algo];
+  if (!alg) throw new Error(`未知哈希算法：${algo}`);
+  return new Uint8Array(await crypto.subtle.digest(alg, bytes));
+}
+
+async function textHash(text, algo) {
+  if (text == null) return fail("输入为空：请输入待哈希内容");
+  if (!ALGO_IDS.includes(algo)) return fail(`未知哈希算法：${algo}`);
+  if (text.length > MAX_TEXT_CHARS) return fail("输入过大（超过 8 MB）");
+  let bytes;
+  try { bytes = utf8(text); } catch { return fail("输入包含无法编码为 UTF-8 的字符"); }
+  try {
+    const d = await digestOne(algo, bytes);
+    return ok(hex(d), { algo, in_bytes: bytes.length });
+  } catch (e) {
+    return fail(`哈希计算失败：${e.message}`);
+  }
+}
+
+async function textHashAll(text, algos = ALGO_IDS) {
+  if (text == null) return fail("输入为空：请输入待哈希内容");
+  if (text.length > MAX_TEXT_CHARS) return fail("输入过大（超过 8 MB）");
+  let bytes;
+  try { bytes = utf8(text); } catch { return fail("输入包含无法编码为 UTF-8 的字符"); }
+  const out = {};
+  try {
+    for (const algo of algos) {
+      if (!ALGO_IDS.includes(algo)) return fail(`未知哈希算法：${algo}`);
+      out[algo] = hex(await digestOne(algo, bytes));
+    }
+  } catch (e) {
+    return fail(`哈希计算失败：${e.message}`);
+  }
+  return ok(out, { in_bytes: bytes.length });
+}
+
+async function fileHash(file, algos = ALGO_IDS, onProgress = null) {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const out = {};
+  try {
+    for (let i = 0; i < algos.length; i++) {
+      out[algos[i]] = hex(await digestOne(algos[i], buf));
+      if (onProgress) onProgress(i + 1, algos.length);
+    }
+  } catch (e) {
+    return fail(`哈希计算失败：${e.message}`);
+  }
+  return ok(out, { in_bytes: buf.length, path: file.name });
+}
+
+function compareHash(a, b) {
+  const ca = (a || "").trim().toLowerCase().replace(/\s+/g, "");
+  const cb = (b || "").trim().toLowerCase().replace(/\s+/g, "");
+  if (!ca || !cb) return fail("请输入两个哈希值进行比较");
+  return ok(ca === cb, { a: ca, b: cb });
+}
+
+return { HASH_ALGOS, ALGO_IDS, textHash, textHashAll, fileHash, compareHash, MAX_TEXT_CHARS };
+})(Object.assign({}, globalThis.DT.core, { sha3: globalThis.DT.sha3 }));
+
+</script>
+<script>
+/* crypto.js — 单文件构建用：IIFE 工厂，依赖显式注入，无全局污染 */
+globalThis.DT = globalThis.DT || {};
+globalThis.DT.crypto = (({ ENV_MAGIC, DEFAULT_ITERATIONS, MIN_ITERATIONS, MAX_ITERATIONS, MAX_DATA_BYTES, ok, fail, concat, rand, hex, unhex, utf8, chacha }) => {
+/* 加密 / 解密：与桌面版信封格式完全兼容（DTK1 + salt(16) + nonce/iv + body）。
+ * AES-GCM / AES-CBC / ChaCha20-Poly1305 / RSA-OAEP / RSA-PSS 全部走 Web Crypto 原生。
+ * AES-ECB 浏览器不提供 —— 明确报错并给出替代建议，绝不静默降级。
+ */
+
+const ALGORITHMS = {
+  "aes-gcm": { name: "AES-GCM", aead: true, nonceLen: 12, sizes: [128, 192, 256], risk: "ok" },
+  "aes-cbc": { name: "AES-CBC", aead: false, ivLen: 16, sizes: [128, 192, 256], risk: "warn" },
+  "aes-ecb": { name: "AES-ECB", aead: false, ivLen: 0, sizes: [128, 192, 256], risk: "err", unsupported: true },
+  "chacha20-poly1305": { name: "ChaCha20-Poly1305", aead: true, nonceLen: 12, sizes: [256], risk: "ok" },
+};
+const ALGO_ORDER = ["aes-gcm", "aes-cbc", "aes-ecb", "chacha20-poly1305", "rsa-oaep", "rsa-pss"];
+
+/* ---------------- 密钥 ---------------- */
+const clampIter = (n) => {
+  const v = Number.isFinite(+n) ? Math.trunc(+n) : DEFAULT_ITERATIONS;
+  return Math.max(MIN_ITERATIONS, Math.min(v, MAX_ITERATIONS));
+};
+
+async function deriveKey(passphrase, salt, keyBits, iterations = DEFAULT_ITERATIONS) {
+  const base = await crypto.subtle.importKey(
+    "raw", utf8(passphrase), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt, iterations: clampIter(iterations), hash: "SHA-256" },
+    base, keyBits);
+  return new Uint8Array(bits);
+}
+
+function parseRawKey(raw, keyBytes) {
+  const s = (raw || "").trim();
+  if (!s) return fail("密钥为空：请输入密钥、粘贴 Hex/Base64 或点击生成随机密钥");
+  let key = null;
+  const hexNorm = s.replace(/[ :]/g, "").toLowerCase();
+  if (/^hex:/i.test(s)) {
+    const c = s.slice(4).replace(/[ :]/g, "").toLowerCase();
+    if (c.length % 2 || !/^[0-9a-f]*$/.test(c)) return fail("Hex 密钥格式无效：长度必须为偶数且仅含 0–9 A–F");
+    key = unhex(c);
+  } else if (/^b64:/i.test(s)) {
+    try { key = b64ToBytes(s.slice(4)); } catch { return fail("Base64 密钥格式无效"); }
+  } else if (hexNorm.length && hexNorm.length % 2 === 0 && /^[0-9a-f]+$/.test(hexNorm)) {
+    key = unhex(hexNorm);
+  } else {
+    try { key = b64ToBytes(s); } catch {
+      return fail("无法识别密钥格式：请使用 Hex 或 Base64，或加前缀 hex:/b64: 强制指定");
+    }
+  }
+  if (key.length !== keyBytes) {
+    return fail(`密钥长度不正确：当前 ${key.length} 字节，算法需要 ${keyBytes} 字节（${keyBytes * 8} 位）`);
+  }
+  return ok(key, { key_bytes: key.length });
+}
+function b64ToBytes(s) {
+  const bin = atob(s.replace(/\s+/g, ""));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function generateRandomKey(keyBytes) {
+  if (![16, 24, 32].includes(keyBytes)) return fail("密钥长度必须是 16 / 24 / 32 字节（128 / 192 / 256 位）");
+  return ok(hex(rand(keyBytes)), { key_bytes: keyBytes });
+}
+
+/* ---------------- 信封 ---------------- */
+const packEnvelope = (passMode, salt, nonce, body) =>
+  passMode ? concat(ENV_MAGIC, salt, nonce, body) : (nonce.length ? concat(nonce, body) : body);
+
+function unpackEnvelope(data, passMode, nonceLen) {
+  if (passMode) {
+    if (data.length < 4 + 16 + nonceLen) throw new Error("密文长度不完整（信封格式损坏）");
+    for (let i = 0; i < 4; i++) {
+      if (data[i] !== ENV_MAGIC[i]) throw new Error("密文缺少 DevToolkit 信封头（DTK1）");
+    }
+    return { salt: data.slice(4, 20), nonce: data.slice(20, 20 + nonceLen), body: data.slice(20 + nonceLen) };
+  }
+  if (nonceLen) {
+    if (data.length < nonceLen) throw new Error("密文长度不完整（缺少 Nonce / IV）");
+    return { salt: new Uint8Array(), nonce: data.slice(0, nonceLen), body: data.slice(nonceLen) };
+  }
+  return { salt: new Uint8Array(), nonce: new Uint8Array(), body: data };
+}
+
+/* ---------------- 对称加解密 ---------------- */
+async function aesKey(rawKey, usage) {
+  if (![16, 24, 32].includes(rawKey.length)) throw new Error("AES 密钥长度必须是 16 / 24 / 32 字节");
+  return crypto.subtle.importKey("raw", rawKey, { name: "AES-GCM" }, false, [usage]);
+}
+
+async function encrypt(rawData, cfg) {
+  if (rawData == null) return fail("输入为空");
+  if (rawData.length > MAX_DATA_BYTES) return fail("输入过大（超过 64 MB 上限），请使用文件处理");
+  const algoId = cfg.algorithm || "aes-gcm";
+  const info = ALGORITHMS[algoId];
+  if (!info) return fail(`对称加密不支持算法：${String(algoId).slice(0, 60)}`);
+  if (info.unsupported) {
+    return fail("浏览器不支持 AES-ECB（Web Crypto 明确排除该不安全模式）。请改用 AES-GCM（推荐）或 AES-CBC");
+  }
+  const keyBits = clampInt(cfg.key_size, 256);
+  if (info.sizes && !info.sizes.includes(keyBits)) {
+    return fail(`${info.name} 密钥长度必须是 ${info.sizes.join(" / ")} 位之一`);
+  }
+  const keyBytes = keyBits / 8;
+  const passMode = (cfg.key_source || "passphrase") !== "raw";
+  const iterations = clampIter(cfg.pbkdf2_iterations);
+
+  let key;
+  let salt = new Uint8Array();
+  if (passMode) {
+    if (!cfg.passphrase) return fail("口令为空：请输入口令");
+    salt = rand(16);
+    try { key = await deriveKey(cfg.passphrase, salt, keyBits, iterations); }
+    catch (e) { return fail(`密钥派生失败：${e.message}`); }
+  } else {
+    const parsed = parseRawKey(cfg.raw_key, keyBytes);
+    if (!parsed.ok) return parsed;
+    key = parsed.data;
+  }
+
+  try {
+    let envelope;
+    if (algoId === "aes-gcm") {
+      const nonce = rand(12);
+      const k = await crypto.subtle.importKey("raw", key, { name: "AES-GCM" }, false, ["encrypt"]);
+      const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, tagLength: 128 }, k, rawData));
+      envelope = packEnvelope(passMode, salt, nonce, ct);
+    } else if (algoId === "chacha20-poly1305") {
+      const nonce = rand(12);
+      // Edge/Firefox 的 Web Crypto 不支持 ChaCha20-Poly1305：走 RFC 8439 纯 JS 实现
+      const ct = chacha.encrypt(key, nonce, rawData);
+      envelope = packEnvelope(passMode, salt, nonce, ct);
+    } else if (algoId === "aes-cbc") {
+      const iv = rand(16);
+      const k = await crypto.subtle.importKey("raw", key, { name: "AES-CBC" }, false, ["encrypt"]);
+      const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-CBC", iv }, k, pkcs7Pad(rawData, 16)));
+      envelope = packEnvelope(passMode, salt, iv, ct);
+    } else {
+      return fail(`未知算法：${algoId}`);
+    }
+    return ok(envelope, {
+      algorithm: algoId, label: info.name, key_size: keyBits, risk: info.risk,
+      iterations: passMode ? iterations : 0,
+      in_bytes: rawData.length, out_bytes: envelope.length,
+    });
+  } catch (e) {
+    return fail(`加密失败：${e.message}`);
+  }
+}
+
+async function decrypt(data, cfg) {
+  if (data == null || data.length === 0) return fail("输入为空：请提供待解密的密文");
+  if (data.length > MAX_DATA_BYTES) return fail("输入过大（超过 64 MB 上限）");
+  const algoId = cfg.algorithm || "aes-gcm";
+  const info = ALGORITHMS[algoId];
+  if (!info) return fail(`对称解密不支持算法：${String(algoId).slice(0, 60)}`);
+  if (info.unsupported) {
+    return fail("浏览器不支持 AES-ECB（Web Crypto 明确排除该不安全模式）。请改用 AES-GCM（推荐）或 AES-CBC");
+  }
+  const keyBits = clampInt(cfg.key_size, 256);
+  const keyBytes = keyBits / 8;
+  const passMode = (cfg.key_source || "passphrase") !== "raw";
+  const nonceLen = info.nonceLen ?? info.ivLen ?? 0;
+  const iterations = clampIter(cfg.pbkdf2_iterations);
+
+  let salt, nonce, body, key;
+  try {
+    ({ salt, nonce, body } = unpackEnvelope(data, passMode, nonceLen));
+    if (passMode) {
+      if (!cfg.passphrase) return fail("口令为空：请输入加密时使用的口令");
+      key = await deriveKey(cfg.passphrase, salt, keyBits, iterations);
+    } else {
+      const parsed = parseRawKey(cfg.raw_key, keyBytes);
+      if (!parsed.ok) return parsed;
+      key = parsed.data;
+    }
+  } catch (e) {
+    return fail(e.message);
+  }
+
+  try {
+    let plain;
+    if (algoId === "aes-gcm") {
+      if (body.length < 16) return fail("密文不完整：GCM 密文至少包含 16 字节认证 Tag");
+      const k = await crypto.subtle.importKey("raw", key, { name: "AES-GCM" }, false, ["decrypt"]);
+      try {
+        plain = new Uint8Array(await crypto.subtle.decrypt(
+          { name: "AES-GCM", iv: nonce, tagLength: 128 }, k, body));
+      } catch {
+        return fail("解密失败：认证校验未通过（密钥错误或密文已被篡改）");
+      }
+    } else if (algoId === "chacha20-poly1305") {
+      if (body.length < 16) return fail("密文不完整：Poly1305 密文至少包含 16 字节认证 Tag");
+      try {
+        plain = chacha.decrypt(key, nonce, body);
+      } catch {
+        return fail("解密失败：认证校验未通过（密钥错误或密文已被篡改）");
+      }
+    } else if (algoId === "aes-cbc") {
+      if (body.length === 0 || body.length % 16) {
+        return fail("密文长度不合法：CBC 密文长度必须是 16 字节的整数倍");
+      }
+      const k = await crypto.subtle.importKey("raw", key, { name: "AES-CBC" }, false, ["decrypt"]);
+      try {
+        plain = pkcs7Unpad(new Uint8Array(await crypto.subtle.decrypt({ name: "AES-CBC", iv: nonce }, k, body)), 16);
+      } catch {
+        return fail("解密失败：PKCS#7 填充无效（密钥错误或密文已损坏）");
+      }
+      if (plain == null) return fail("解密失败：PKCS#7 填充无效（密钥错误或密文已损坏）");
+    } else {
+      return fail(`未知算法：${algoId}`);
+    }
+    return ok(plain, {
+      algorithm: algoId, label: info.name, key_size: keyBits,
+      in_bytes: data.length, out_bytes: plain.length,
+    });
+  } catch (e) {
+    return fail(`解密失败：${e.message}`);
+  }
+}
+
+function clampInt(v, def) {
+  const n = Number.isFinite(+v) ? Math.trunc(+v) : def;
+  return n;
+}
+function pkcs7Pad(bytes, block) {
+  const padLen = block - (bytes.length % block);
+  const out = new Uint8Array(bytes.length + padLen);
+  out.set(bytes);
+  out.fill(padLen, bytes.length);
+  return out;
+}
+function pkcs7Unpad(bytes, block) {
+  if (!bytes.length) return null;
+  const padLen = bytes[bytes.length - 1];
+  if (padLen < 1 || padLen > block || padLen > bytes.length) return null;
+  for (let i = bytes.length - padLen; i < bytes.length; i++) {
+    if (bytes[i] !== padLen) return null;
+  }
+  return bytes.slice(0, bytes.length - padLen);
+}
+
+/* ---------------- RSA ---------------- */
+const PEM_LINE = 64;
+function pemToDer(pem) {
+  const body = (pem || "").replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
+  if (!body) throw new Error("密钥内容为空");
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(body)) throw new Error("密钥不是有效的 Base64 内容");
+  return b64ToBytes(body);
+}
+async function importRsaKey(pem, kind) {
+  // kind: 'spki'（公钥）/ 'pkcs8'（私钥）
+  const der = pemToDer(pem);
+  const isPub = /BEGIN (RSA )?PUBLIC KEY/.test(pem);
+  const isPriv = /BEGIN (RSA )?PRIVATE KEY/.test(pem);
+  if (kind === "spki" && isPriv) throw new Error("这是私钥：该操作需要公钥（应包含 BEGIN PUBLIC KEY）");
+  if (kind === "pkcs8" && isPub) throw new Error("这不是私钥：该操作需要私钥");
+  try {
+    if (kind === "spki") {
+      return await crypto.subtle.importKey("spki", der, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]);
+    }
+    return await crypto.subtle.importKey("pkcs8", der, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["decrypt"]);
+  } catch {
+    throw new Error("无法解析 RSA 密钥：请确认是 PEM 格式（PUBLIC KEY / PRIVATE KEY）");
+  }
+}
+async function importRsaPrivateForSign(pem) {
+  const der = pemToDer(pem);
+  if (/BEGIN (RSA )?PUBLIC KEY/.test(pem)) throw new Error("这不是私钥：签名需要私钥");
+  try {
+    return await crypto.subtle.importKey("pkcs8", der, { name: "RSA-PSS", hash: "SHA-256" }, true, ["sign"]);
+  } catch {
+    throw new Error("无法解析 RSA 私钥：请确认是 PEM 格式");
+  }
+}
+async function importRsaPublicForVerify(pem) {
+  const der = pemToDer(pem);
+  if (/BEGIN (RSA )?PRIVATE KEY/.test(pem)) throw new Error("这是私钥：验签需要公钥");
+  try {
+    return await crypto.subtle.importKey("spki", der, { name: "RSA-PSS", hash: "SHA-256" }, true, ["verify"]);
+  } catch {
+    throw new Error("无法解析 RSA 公钥：请确认是 PEM 格式");
+  }
+}
+
+async function rsaGenerate(bits = 2048) {
+  if (![2048, 3072, 4096].includes(bits)) {
+    return fail("浏览器端 RSA 密钥长度支持 2048 / 3072 / 4096 位（1024 位已不安全，不提供）");
+  }
+  try {
+    const kp = await crypto.subtle.generateKey(
+      { name: "RSA-OAEP", modulusLength: bits, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+      true, ["encrypt", "decrypt"]);
+    const spki = new Uint8Array(await crypto.subtle.exportKey("spki", kp.publicKey));
+    const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", kp.privateKey));
+    return ok({
+      public_pem: derToPem(spki, "PUBLIC KEY"),
+      private_pem: derToPem(pkcs8, "PRIVATE KEY"),
+      bits,
+    }, { bits });
+  } catch (e) {
+    return fail(`密钥生成失败：${e.message}`);
+  }
+}
+function derToPem(der, label) {
+  const b64 = btoa(String.fromCharCode.apply(null, der));
+  const lines = b64.match(new RegExp(`.{1,${PEM_LINE}}`, "g")) || [];
+  return `-----BEGIN ${label}-----\n${lines.join("\n")}\n-----END ${label}-----`;
+}
+
+const RSA_MAX = { 2048: 190, 3072: 318, 4096: 446 };
+async function rsaEncrypt(pubPem, data) {
+  if (!data || !data.length) return fail("输入为空");
+  let key;
+  try { key = await importRsaKey(pubPem, "spki"); }
+  catch (e) { return fail(e.message); }
+  const bits = key.algorithm.modulusLength;
+  const limit = RSA_MAX[bits] ?? Math.floor(bits / 8) - 66;
+  if (data.length > limit) {
+    return fail(`明文过长：RSA-OAEP 一次最多加密 ${limit} 字节（${bits} 位密钥）。更大数据请使用 AES 加密后再用 RSA 加密密钥（混合加密）`);
+  }
+  try {
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "RSA-OAEP" }, key, data));
+    const envelope = concat(ENV_MAGIC, rand(16), ct);
+    return ok(envelope, { label: "RSA-OAEP", bits, in_bytes: data.length, out_bytes: envelope.length });
+  } catch (e) {
+    return fail(`RSA 加密失败：${e.message}`);
+  }
+}
+async function rsaDecrypt(privPem, data) {
+  if (!data || !data.length) return fail("输入为空：请提供待解密的密文");
+  let key;
+  try { key = await importRsaKey(privPem, "pkcs8"); }
+  catch (e) { return fail(e.message); }
+  const bits = key.algorithm.modulusLength;
+  let ct = data;
+  if (data.length >= 4 && data[0] === ENV_MAGIC[0] && data[1] === ENV_MAGIC[1] &&
+      data[2] === ENV_MAGIC[2] && data[3] === ENV_MAGIC[3]) {
+    ct = data.slice(20);
+  }
+  if (ct.length !== bits / 8) {
+    return fail(`密文长度不正确：当前 ${ct.length} 字节，${bits} 位密钥的密文应为 ${bits / 8} 字节`);
+  }
+  try {
+    const plain = new Uint8Array(await crypto.subtle.decrypt({ name: "RSA-OAEP" }, key, ct));
+    return ok(plain, { label: "RSA-OAEP", bits, out_bytes: plain.length });
+  } catch {
+    return fail("RSA 解密失败：密钥与密文不匹配或密文已损坏");
+  }
+}
+
+async function rsaSign(privPem, data) {
+  if (!data) return fail("输入为空");
+  let key;
+  try { key = await importRsaPrivateForSign(privPem); }
+  catch (e) { return fail(e.message); }
+  try {
+    const sig = new Uint8Array(await crypto.subtle.sign(
+      { name: "RSA-PSS", saltLength: 32 }, key, data));
+    return ok(sig, { label: "RSA-PSS-SHA256", bits: key.algorithm.modulusLength, out_bytes: sig.length });
+  } catch (e) {
+    return fail(`签名失败：${e.message}`);
+  }
+}
+async function rsaVerify(pubPem, data, sig) {
+  if (!data || !sig || !sig.length) return fail("请提供原文与签名");
+  let key;
+  try { key = await importRsaPublicForVerify(pubPem); }
+  catch (e) { return fail(e.message); }
+  try {
+    const good = await crypto.subtle.verify({ name: "RSA-PSS", saltLength: 32 }, key, sig, data);
+    return ok(Boolean(good), { label: "RSA-PSS-SHA256" });
+  } catch (e) {
+    return fail(`验签失败：${e.message}`);
+  }
+}
+
+const looksLikePrivateKey = (pem) =>
+  /BEGIN (RSA |ENCRYPTED )?PRIVATE KEY/.test(pem || "");
+const riskOf = (id) => ALGORITHMS[id]?.risk ?? "warn";
+
+return { ALGORITHMS, ALGO_ORDER, encrypt, decrypt, deriveKey, parseRawKey, generateRandomKey, rsaGenerate, rsaEncrypt, rsaDecrypt, rsaSign, rsaVerify, looksLikePrivateKey, riskOf, MIN_ITERATIONS, MAX_ITERATIONS, DEFAULT_ITERATIONS };
+})(Object.assign({}, globalThis.DT.core, { chacha: globalThis.DT.chacha }));
+
+</script>
+<script>
+/* 压缩 / 解压：GZIP / ZLIB / DEFLATE 走浏览器原生 CompressionStream。
+ * ZIP / Brotli / Zstandard / LZ4 浏览器无原生实现 —— 明确提示，不静默失败。
+ * 解压带输出上限（默认 64 MB），防压缩炸弹。
+ */
+globalThis.DT = globalThis.DT || {};
+globalThis.DT.compress = (({ ok, fail, concat }) => {
+  const DEFAULT_CAP_MB = 64;
+  const hasCS = typeof CompressionStream !== "undefined";
+  const hasDS = typeof DecompressionStream !== "undefined";
+
+  const FORMATS = ["gzip", "zlib", "deflate"];
+  const FORMAT_NAMES = { gzip: "GZIP", zlib: "ZLIB", deflate: "DEFLATE（裸流）", zip: "ZIP", brotli: "Brotli", zstd: "Zstandard", lz4: "LZ4" };
+  const UNSUPPORTED = { zip: "ZIP", brotli: "Brotli", zstd: "Zstandard", lz4: "LZ4" };
+
+  async function streamThrough(bytes, stream) {
+    const out = new Blob([bytes]).stream().pipeThrough(stream);
+    return new Uint8Array(await new Response(out).arrayBuffer());
+  }
+
+  function zlibHeader(bytes) {
+    // zlib = 2 字节头 + deflate 裸流 + 4 字节 Adler-32
+    // 取 deflate 裸流时去掉 zlib 头尾即可
+    if (bytes.length < 6) throw new Error("ZLIB 数据过短");
+    const cmf = bytes[0], flg = bytes[1];
+    if ((cmf & 0x0f) !== 8) throw new Error("不是有效的 ZLIB 数据（压缩方法非 deflate）");
+    if (((cmf << 8) + flg) % 31 !== 0) throw new Error("ZLIB 头校验失败");
+    const fdict = (flg & 0x20) !== 0;
+    const skip = fdict ? 6 : 2;
+    return { body: bytes.slice(skip, bytes.length - 4), adler: bytes.slice(bytes.length - 4) };
+  }
+  function deflateToZlib(body, raw) {
+    // 用 Adler-32 手工封装：CMF=0x78, FLG 使 (CMF<<8|FLG)%31==0
+    const cmf = 0x78;
+    const flg = 0x9c; // 默认压缩级别，校验通过
+    return concat(new Uint8Array([cmf, flg]), body, adler32(raw));
+  }
+  function adler32(bytes) {
+    let a = 1, b = 0;
+    for (let i = 0; i < bytes.length; i++) {
+      a = (a + bytes[i]) % 65521;
+      b = (b + a) % 65521;
+    }
+    const out = new Uint8Array(4);
+    out[0] = (b >>> 8) & 0xff; out[1] = b & 0xff;
+    out[2] = (a >>> 8) & 0xff; out[3] = a & 0xff;
+    return out;
+  }
+
+  async function compressBytes(data, fmt) {
+    if (UNSUPPORTED[fmt]) {
+      return fail(`浏览器不支持 ${UNSUPPORTED[fmt]} 压缩（无原生实现）。可用格式：GZIP / ZLIB / DEFLATE`);
+    }
+    if (!FORMATS.includes(fmt)) return fail(`未知压缩格式：${fmt}`);
+    if (!hasCS) return fail("当前浏览器不支持 CompressionStream，请使用较新版本浏览器");
+    if (data == null) return fail("输入为空");
+    try {
+      if (fmt === "gzip") {
+        const out = await streamThrough(data, new CompressionStream("gzip"));
+        return ok(out, { fmt, in_bytes: data.length, out_bytes: out.length, label: "GZIP" });
+      }
+      if (fmt === "deflate") {
+        // CompressionStream 的 "deflate" 产生 zlib 包装；"deflate-raw" 为裸流
+        const out = await streamThrough(data, new CompressionStream("deflate-raw"));
+        return ok(out, { fmt, in_bytes: data.length, out_bytes: out.length, label: "DEFLATE（裸流）" });
+      }
+      // zlib：用 deflate-raw + 手工 zlib 头/尾
+      const raw = await streamThrough(data, new CompressionStream("deflate-raw"));
+      const out = deflateToZlib(raw, data);
+      return ok(out, { fmt: "zlib", in_bytes: data.length, out_bytes: out.length, label: "ZLIB" });
+    } catch (e) {
+      return fail(`压缩失败：${e.message}`);
+    }
+  }
+
+  async function decompressBytes(data, fmt, capMb = DEFAULT_CAP_MB) {
+    if (UNSUPPORTED[fmt]) {
+      return fail(`浏览器不支持 ${UNSUPPORTED[fmt]} 解压（无原生实现）。可用格式：GZIP / ZLIB / DEFLATE`);
+    }
+    if (!FORMATS.includes(fmt)) return fail(`未知压缩格式：${fmt}`);
+    if (!hasDS) return fail("当前浏览器不支持 DecompressionStream，请使用较新版本浏览器");
+    if (!data || !data.length) return fail("输入为空：请提供待解压数据");
+    const cap = capMb * 1024 * 1024;
+    try {
+      let out;
+      if (fmt === "gzip") out = await streamThrough(data, new DecompressionStream("gzip"));
+      else if (fmt === "deflate") out = await streamThrough(data, new DecompressionStream("deflate-raw"));
+      else {
+        const { body } = zlibHeader(data);
+        out = await streamThrough(body, new DecompressionStream("deflate-raw"));
+      }
+      if (out.length > cap) {
+        return fail(`解压结果超过 ${capMb} MB 上限，已终止（压缩炸弹防护）`, "cap_exceeded");
+      }
+      return ok(out, { fmt, in_bytes: data.length, out_bytes: out.length, label: FORMAT_NAMES[fmt] });
+    } catch (e) {
+      return fail(`解压失败：数据不是有效的 ${FORMAT_NAMES[fmt]} 流或已损坏`, e.message);
+    }
+  }
+
+  function sniff(data) {
+    if (!data || data.length < 2) return null;
+    if (data[0] === 0x1f && data[1] === 0x8b) return "gzip";
+    if (data[0] === 0x78 && ((data[0] << 8) + data[1]) % 31 === 0 && (data[0] & 0x0f) === 8) return "zlib";
+    if (data.length >= 4 && data[0] === 0x50 && data[1] === 0x4b && data[2] === 0x03 && data[3] === 0x04) return "zip";
+    if (data.length >= 4 && data[0] === 0x28 && data[1] === 0xb5 && data[2] === 0x2f && data[3] === 0xfd) return "zstd";
+    if (data.length >= 4 && data[0] === 0x04 && data[1] === 0x22 && data[2] === 0x4d && data[3] === 0x18) return "lz4";
+    return null;
+  }
+
+  return {
+    FORMATS, FORMAT_NAMES, UNSUPPORTED, DEFAULT_CAP_MB,
+    compressBytes, decompressBytes, sniff,
+    supportsCompression: hasCS, supportsDecompression: hasDS,
+  };
+})(globalThis.DT.core);
+
+</script>
+<script>
+/* 智能解码：自动尝试「编码 + 压缩」多层链路，与桌面版 smart_decode 语义一致。 */
+globalThis.DT = globalThis.DT || {};
+globalThis.DT.smart = (({ ok, fail, utf8, fromUtf8 }) => {
+  const MAX_INPUT_CHARS = 4_000_000;
+  const MAX_LAYERS = 10;
+  const PREVIEW_LIMIT = 96;
+
+  const clip = (s) => {
+    s = s.replace(/\r/g, "").replace(/\n/g, "⏎");
+    return s.length > PREVIEW_LIMIT ? s.slice(0, PREVIEW_LIMIT) + "…" : s;
+  };
+  const printableRatio = (s) => {
+    if (!s) return 0;
+    let n = 0;
+    for (const ch of s) { const c = ch.codePointAt(0); if (c >= 32 || ch === "\t" || ch === "\n") n++; }
+    return n / s.length;
+  };
+  const preview = (v) => {
+    if (v instanceof Uint8Array) {
+      try {
+        const t = fromUtf8(v);
+        if (printableRatio(t) > 0.8) return clip(t);
+      } catch {}
+      const head = Array.from(v.slice(0, 16), (b) => b.toString(16).padStart(2, "0").toUpperCase());
+      return head.join(" ") + ` …（二进制 ${v.length.toLocaleString()} 字节）`;
+    }
+    return clip(String(v));
+  };
+
+  async function tryStringDecoders(text) {
+    const CD = globalThis.DT.codecs;
+    const compact = text.replace(/\s+/g, "");
+    const trials = [];
+    if (/^[A-Za-z0-9+/]{16,}={0,2}$/.test(compact) && compact.length % 4 === 0) trials.push(["Base64 解码", "base64"]);
+    if (/^[A-Za-z0-9\-_]{16,}={0,2}$/.test(compact) && compact.length % 4 !== 1) trials.push(["Base64URL 解码", "base64url"]);
+    if (/^[0-9a-fA-F]{16,}$/.test(compact) && compact.length % 2 === 0) trials.push(["Hex 解码", "hex"]);
+    if (/^[A-Z2-7]+={0,6}$/.test(compact) && compact.length % 8 === 0 && compact.length >= 8) trials.push(["Base32 解码", "base32"]);
+    if (/%[0-9A-Fa-f]{2}/.test(text)) trials.push(["URL 解码", "url"]);
+    if (/\\u[0-9a-fA-F]{4}/.test(text)) trials.push(["Unicode 转义解码", "unicode"]);
+    if (/&(#[0-9]{2,}|#[xX][0-9a-fA-F]{2,}|[a-zA-Z]{2,8});/.test(text)) trials.push(["HTML 实体解码", "html"]);
+
+    for (const [action, codecId] of trials) {
+      const r = CD.runCodec(codecId, "decode", compact);
+      if (!r.ok) continue;
+      const decoded = r.data;
+      if (decoded === text) continue;
+      // URL / Unicode / HTML 返回字符串；字节型返回的也是字符串（此处按文本处理）
+      return { action, codecId, value: decoded };
+    }
+    return null;
+  }
+
+  async function tryDecompress(bytes, capMb) {
+    const CP = globalThis.DT.compress;
+    const fmt = CP.sniff(bytes);
+    if (!fmt) return null;
+    const r = await CP.decompressBytes(bytes, fmt, capMb);
+    if (!r.ok) {
+      if (r.detail === "cap_exceeded") return { bomb: true, error: r.error };
+      return null;
+    }
+    return { action: `${CP.FORMAT_NAMES[fmt]} 解压`, value: r.data };
+  }
+
+  return async function smartDecode(text, maxLayers = 5, capMb = 64) {
+    if (text == null || !text.trim()) return fail("请先输入待解码内容");
+    if (text.length > MAX_INPUT_CHARS) return fail("输入过大（超过 4 MB），请使用文件处理");
+    maxLayers = Math.max(1, Math.min(Math.trunc(maxLayers) || 5, MAX_LAYERS));
+
+    const steps = [];
+    const seen = new Set();
+    const chain = [];
+    let current = text;
+    let layers = 0;
+
+    while (layers < maxLayers) {
+      if (typeof current === "string") {
+        const key = current.slice(0, 4096);
+        if (seen.has(key)) break;
+        seen.add(key);
+        const trial = await tryStringDecoders(current);
+        if (!trial) break;
+        const before = current;
+        let decoded = trial.value;
+        // 若解码结果是可打印文本，先看是否藏着压缩数据
+        let bytes = null;
+        try { bytes = utf8(decoded); } catch {}
+        if (bytes) {
+          const comp = await tryDecompress(bytes, capMb);
+          if (comp && comp.bomb) return fail(comp.error, "压缩炸弹防护终止：已保留原始输入");
+          if (comp && comp.action) {
+            steps.push({
+              index: steps.length + 1, action: trial.action,
+              detail: "解码为二进制后检测到压缩魔数",
+              beforePreview: preview(before), afterPreview: preview(bytes),
+              beforeSize: `${before.length.toLocaleString()} 字符`, afterSize: `${bytes.length.toLocaleString()} 字节`,
+            });
+            chain.push(trial.codecId);
+            layers++;
+            if (layers >= maxLayers) { current = bytes; break; }
+            steps.push({
+              index: steps.length + 1, action: comp.action, detail: "压缩魔数命中，解压成功",
+              beforePreview: preview(bytes), afterPreview: preview(comp.value),
+              beforeSize: `${bytes.length.toLocaleString()} 字节`, afterSize: `${comp.value.length.toLocaleString()} 字节`,
+            });
+            chain.push(comp.action.split(" ")[0].toLowerCase());
+            layers++;
+            try { current = fromUtf8(comp.value); } catch { current = comp.value; }
+            continue;
+          }
+        }
+        steps.push({
+          index: steps.length + 1, action: trial.action, detail: "特征匹配并解码成功",
+          beforePreview: preview(before), afterPreview: preview(decoded),
+          beforeSize: `${before.length.toLocaleString()} 字符`, afterSize: `${decoded.length.toLocaleString()} 字符`,
+        });
+        chain.push(trial.codecId);
+        layers++;
+        current = decoded;
+      } else {
+        const comp = await tryDecompress(current, capMb);
+        if (comp && comp.bomb) return fail(comp.error, "压缩炸弹防护终止：已保留原始输入");
+        if (comp) {
+          steps.push({
+            index: steps.length + 1, action: comp.action, detail: "压缩魔数命中，解压成功",
+            beforePreview: preview(current), afterPreview: preview(comp.value),
+            beforeSize: `${current.length.toLocaleString()} 字节`, afterSize: `${comp.value.length.toLocaleString()} 字节`,
+          });
+          chain.push(comp.action.split(" ")[0].toLowerCase());
+          layers++;
+          try { current = fromUtf8(comp.value); } catch { current = comp.value; }
+          continue;
+        }
+        try { current = fromUtf8(current); }
+        catch { break; }
+        steps.push({
+          index: steps.length + 1, action: "UTF-8 文本确认", detail: "二进制数据为有效 UTF-8 文本",
+          beforePreview: preview(current), afterPreview: preview(current),
+          beforeSize: `${current.length.toLocaleString()} 字节`, afterSize: `${current.length.toLocaleString()} 字符`,
+        });
+        chain.push("utf-8");
+        layers++;
+      }
+    }
+
+    if (current instanceof Uint8Array) {
+      try { current = fromUtf8(current); }
+      catch {
+        return fail("解码终止：结果为二进制数据且无法进一步解压或按文本显示。已保留原始输入");
+      }
+    }
+
+    const names = {
+      base64: "Base64", base64url: "Base64URL", hex: "Hex", base32: "Base32",
+      url: "URL", unicode: "Unicode", html: "HTML 实体",
+      gzip: "GZIP", zlib: "ZLIB", deflate: "DEFLATE", "utf-8": "UTF-8",
+    };
+    const chainStr = chain.length ? chain.map((c) => names[c] || c).join(" → ") : "（未做任何处理）";
+    let note;
+    if (layers >= maxLayers && chain.length) note = `已达最大层数（${maxLayers} 层）自动终止`;
+    else if (chain.length) note = "链路自然终止（结果已是可读文本且无进一步特征）";
+    else note = "未识别到可解码的编码特征，保留原始输入";
+
+    return ok({ finalText: current, steps, chain: chainStr, layersUsed: layers }, { note, layers_used: layers, max_layers: maxLayers });
+  };
+})(globalThis.DT.core);
+
+</script>
+<script>
+/* 自检：验证 4 层算法与桌面版一致。浏览器与 Node 均可运行。
+ * 返回 { passed, failed, items }，供 HTML 页内「自检」按钮与构建校验使用。
+ */
+globalThis.DT = globalThis.DT || {};
+globalThis.DT.selftest = async function () {
+  const C = globalThis.DT.core, CD = globalThis.DT.codecs, H = globalThis.DT.hash, CR = globalThis.DT.crypto;
+  const items = [];
+  const t = (name, cond, extra = "") => items.push({ name, pass: !!cond, extra });
+
+  // ---- 编码 ----
+  t("b64 编码", CD.b64Encode("abc").data === "YWJj");
+  t("b64 解码", CD.b64Decode("YWJj").data === "abc");
+  t("b64url 无填充", CD.b64Encode("a\u00ff", { urlsafe: true }).data.indexOf("=") === -1);
+  t("b32 编码", CD.b32Encode("abc").data === "MFRGG===");
+  t("hex 编码", CD.hexEncode("abc").data === "616263");
+  t("hex 解码 0x", CD.hexDecode("0x61 0x62").data === "ab");
+  t("b58 往返", CD.b58Decode(CD.b58Encode("hello").data).data === "hello");
+  t("b62 往返", CD.b62Decode(CD.b62Encode("hello").data).data === "hello");
+  t("url 往返", CD.urlDecode(CD.urlEncode("a b/中").data).data === "a b/中");
+  t("html 往返", CD.htmlDecode(CD.htmlEncode("<a>&中").data).data === "<a>&中");
+  t("unicode 往返", CD.unicodeDecode(CD.unicodeEncode("中😀").data).data === "中😀");
+  t("ascii 往返", CD.asciiDecode(CD.asciiEncode("AB").data).data === "AB");
+  t("rot13 对称", CD.rot13(CD.rot13("Hello").data).data === "Hello");
+  t("qp 往返", CD.qpDecode(CD.qpEncode("中文 =x").data).data === "中文 =x");
+  t("ascii 拒绝宽松数", !CD.asciiDecode("1_0").ok);
+  t("b64 拒绝 4n+1", !CD.b64Decode("A").ok);
+
+  // ---- 哈希（Python hashlib 权威值）----
+  const V = {
+    md5: "900150983cd24fb0d6963f7d28e17f72",
+    sha1: "a9993e364706816aba3e25717850c26c9cd0d89d",
+    sha224: "23097d223405d8228642a477bda255b32aadbce4bda0b3f7e36c9da7",
+    sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    sha512: "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f",
+    sha3_256: "3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532",
+    sha3_512: "b751850b1a57168a5693cd924b6b096e08f621827444f70d884f5d0240d2712e10e116e9192af3c91a7ec57647e3934057340b4cf408d5a56592f8274eec53f0",
+    blake2b: "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d17d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923",
+    blake2s: "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982",
+  };
+  for (const [algo, want] of Object.entries(V)) {
+    const r = await H.textHash("abc", algo);
+    t(`hash ${algo}`, r.ok && r.data === want, r.ok ? (r.data === want ? "" : r.data) : r.error);
+  }
+  t("hash 全部 10 种", (await H.textHashAll("abc")).ok);
+
+  // ---- 加密 ----
+  const DATA = new TextEncoder().encode("roundtrip 你好 😀");
+  for (const [algo, bits] of [["aes-gcm", 256], ["aes-cbc", 256], ["aes-gcm", 128]]) {
+    const cfg = { algorithm: algo, key_source: "passphrase", passphrase: "pw", key_size: bits };
+    const e = await CR.encrypt(DATA, cfg);
+    const d = await CR.decrypt(e.data, cfg);
+    t(`${algo}-${bits} 往返`, e.ok && d.ok && d.data.length === DATA.length, d.error || e.error || "");
+  }
+  {
+    const cfg = { algorithm: "aes-gcm", key_source: "passphrase", passphrase: "pw", key_size: 256 };
+    const e = await CR.encrypt(DATA, cfg);
+    const d = await CR.decrypt(e.data, { ...cfg, passphrase: "bad" });
+    t("错误口令被拒", !d.ok);
+    const bad = new Uint8Array(e.data); bad[bad.length - 1] ^= 1;
+    t("篡改密文被拒", !(await CR.decrypt(bad, cfg)).ok);
+    const empty = await CR.encrypt(new Uint8Array(0), cfg);
+    t("空明文往返", (await CR.decrypt(empty.data, cfg)).ok);
+  }
+  t("ECB 明确拒绝", !(await CR.encrypt(DATA, { algorithm: "aes-ecb", key_source: "passphrase", passphrase: "pw", key_size: 256 })).ok);
+  {
+    const cfg = { algorithm: "chacha20-poly1305", key_source: "passphrase", passphrase: "pw", key_size: 256 };
+    const e = await CR.encrypt(DATA, cfg);
+    const d = await CR.decrypt(e.data, cfg);
+    t("chacha20-poly1305 往返", e.ok && d.ok && d.data.length === DATA.length, d.error || e.error || "");
+    const bad = new Uint8Array(e.data); bad[bad.length - 1] ^= 1;
+    t("chacha 篡改被拒", !(await CR.decrypt(bad, cfg)).ok);
+  }
+
+  const failed = items.filter((i) => !i.pass);
+  return { passed: items.length - failed.length, failed: failed.length, items };
+};
+
+</script>
+<script>
+/* UI 逻辑：8 个页面的交互与算法调用。所有算法来自 DT.* 命名空间。 */
+(() => {
+  const { core: C, codecs: CD, hash: H, crypto: CR, compress: CP, smart: SM } = globalThis.DT;
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  const status = (msg) => { $("status").textContent = msg; };
+  const setChip = (node, text, kind = "info") => {
+    node.textContent = text || "";
+    node.className = "chip" + (text ? " " + kind : "");
+  };
+  const enc = (s) => new TextEncoder().encode(s);
+  const dec = (b) => new TextDecoder().decode(b);
+  const toB64 = (bytes) => {
+    let s = "";
+    const CH = 0x8000;
+    for (let i = 0; i < bytes.length; i += CH) s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+    return btoa(s);
+  };
+  const fromB64 = (str) => {
+    const bin = atob(str);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  };
+  const download = (bytes, name, type = "application/octet-stream") => {
+    const url = URL.createObjectURL(new Blob([bytes], { type }));
+    const a = document.createElement("a");
+    a.href = url; a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  /* ================= 导航与主题 ================= */
+  const PAGES = [
+    ["encode", "编码解码"], ["crypto", "加密解密"], ["compress", "压缩解压"],
+    ["hash", "哈希计算"], ["smart", "智能解码"], ["files", "文件处理"], ["about", "关于软件"],
+  ];
+  const ICONS = {
+    encode: "⟨⟩", crypto: "⚿", compress: "⊟", hash: "#",
+    smart: "✧", files: "▤", about: "ⓘ",
+  };
+  const nav = $("nav");
+  PAGES.forEach(([id, label], i) => {
+    const b = el("button", null, (ICONS[id] || "•") + " " + label);
+    b.dataset.page = id;
+    b.onclick = () => go(id);
+    nav.appendChild(b);
+    if (i === 0) b.setAttribute("aria-current", "page");
+  });
+  function go(id) {
+    document.querySelectorAll(".page").forEach((p) => p.classList.toggle("active", p.id === "page-" + id));
+    nav.querySelectorAll("button").forEach((b) => {
+      if (b.dataset.page === id) b.setAttribute("aria-current", "page");
+      else b.removeAttribute("aria-current");
+    });
+    $("scrollArea").scrollTop = 0;
+  }
+  const THEME_KEY = "dtweb-theme";
+  function applyTheme(t) {
+    document.documentElement.dataset.theme = t;
+    try { localStorage.setItem(THEME_KEY, t); } catch {}
+    status(`主题切换为${t === "light" ? "浅色" : "深色"}`);
+  }
+  let theme = "dark";
+  try { theme = localStorage.getItem(THEME_KEY) || "dark"; } catch {}
+  applyTheme(theme);
+  $("themeBtn").onclick = () => applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+  document.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "t") { e.preventDefault(); $("themeBtn").click(); }
+    const m = /^([1-7])$/.exec(e.key);
+    if ((e.ctrlKey || e.metaKey) && m) { e.preventDefault(); go(PAGES[Number(m[1]) - 1][0]); }
+  });
+
+  /* ================= 通用：双向切换 ================= */
+  function bindSeg(node, onChange) {
+    const btns = [...node.querySelectorAll("button")];
+    btns.forEach((b) => b.onclick = () => {
+      btns.forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+      onChange(b.dataset.dir);
+    });
+    return () => btns.find((b) => b.getAttribute("aria-pressed") === "true").dataset.dir;
+  }
+
+  /* ================= 编码解码 ================= */
+  const encIn = $("encIn"), encOut = $("encOut"), encAlgo = $("encAlgo");
+  CD.CODEC_ORDER.forEach((id) => {
+    const o = el("option", null, CD.CODECS[id].name);
+    o.value = id;
+    encAlgo.appendChild(o);
+  });
+  const HINTS = {
+    base64: "每 3 字节映射为 4 字符；标准字母表 A–Z a–z 0–9 + /，= 作为填充。",
+    base64url: "使用 - _ 替代 + / 并省略填充，可直接用于 URL 与 JWT。",
+    base32: "RFC 4648：字母表 A–Z 2–7，= 填充，常用于 TOTP 与 DNS 记录。",
+    hex: "支持大小写、有无空格分隔及 0x 前缀的输入。",
+    base58: "Bitcoin 字母表，去掉易混淆的 0 O I l；常用于加密货币地址与 IPFS CID。",
+    base62: "字母表 0–9 a–z A–Z，无填充；常用于短链接 ID 与业务编号。",
+    url: "UTF-8 百分号编码；解码时自动识别 %20 与 + 两种空格形式。",
+    html: "编码 & < > \" ' 及非 ASCII 字符；解码支持命名 / 十进制 / 十六进制实体。",
+    unicode: "\\uXXXX 格式；自动处理代理对（emoji 等超出 BMP 的字符）。",
+    ascii: "字符与码点互转（十进制或 0x 十六进制）；仅支持 0–127。",
+    rot13: "仅作用于 A–Z a–z 26 个字母，其余字符保持不变；编码即解码。",
+    qp: "RFC 2045 =XX 十六进制转义，常用于邮件 MIME 正文。",
+  };
+  function syncEncHint() { $("encHint").textContent = HINTS[encAlgo.value] || ""; }
+  encAlgo.onchange = syncEncHint;
+  syncEncHint();
+  let encDirection = bindSeg($("encDir"), () => {});
+  encIn.oninput = () => { $("encInMeta").textContent = `${encIn.value.length.toLocaleString()} 字符`; };
+  $("encClear").onclick = () => { encIn.value = ""; encOut.value = ""; encIn.oninput(); setChip($("encChip"), ""); };
+  $("encPaste").onclick = async () => {
+    try { encIn.value = await navigator.clipboard.readText(); encIn.oninput(); status("已从剪贴板粘贴"); }
+    catch { status("浏览器拒绝了剪贴板访问，请手动粘贴（Ctrl+V）"); }
+  };
+  $("encSwap").onclick = () => {
+    const out = encOut.value;
+    const input = encIn.value;
+    encOut.value = input;
+    encIn.value = out;
+    encIn.oninput();
+    status("已交换输入与输出内容");
+  };
+  $("encRun").onclick = () => {
+    const dir = encDirection();
+    const text = encIn.value;
+    if (!text.trim()) { setChip($("encChip"), "✕ 输入为空：请输入待处理内容", "err"); return; }
+    const t0 = performance.now();
+    if ($("encBatch").checked) {
+      const lines = text.split("\n").map((l) => l.replace(/\r$/, ""));
+      const rows = [];
+      let failed = 0;
+      lines.forEach((line, i) => {
+        if (!line.trim()) return;
+        const r = CD.runCodec(encAlgo.value, dir, line);
+        if (r.ok) rows.push(`${i + 1}  ${r.data}`);
+        else { rows.push(`${i + 1}  ✕ ${r.error}`); failed++; }
+      });
+      encOut.value = rows.join("\n");
+      setChip($("encChip"),
+        `✓ 批量完成 · ${rows.length} 行` + (failed ? ` · ${failed} 行失败` : "") +
+        ` · ${Math.round(performance.now() - t0)} 毫秒`,
+        failed ? "warn" : "ok");
+    } else {
+      const r = CD.runCodec(encAlgo.value, dir, text);
+      if (!r.ok) { setChip($("encChip"), "✕ " + r.error, "err"); status("执行失败：" + r.error); return; }
+      encOut.value = r.data;
+      setChip($("encChip"), `✓ ${dir === "encode" ? "编码" : "解码"}成功 · ${Math.round(performance.now() - t0)} 毫秒`, "ok");
+    }
+    status("处理完成（" + CD.CODECS[encAlgo.value].name + "）");
+  };
+  $("encCopy").onclick = async () => {
+    if (!encOut.value) return status("没有可复制的结果");
+    try { await navigator.clipboard.writeText(encOut.value); status(`已复制 ${encOut.value.length.toLocaleString()} 字符`); }
+    catch { encOut.select(); document.execCommand("copy"); status("已复制"); }
+  };
+
+  /* ================= 加密解密 ================= */
+  const cryIn = $("cryIn"), cryOut = $("cryOut"), cryAlgo = $("cryAlgo"), cryParams = $("cryParams");
+  const CRY_ALGOS = [
+    ["aes-gcm", "AES-256-GCM（推荐）"],
+    ["aes-cbc", "AES-CBC（无认证）"],
+    ["aes-ecb", "AES-ECB（不安全，浏览器不支持）"],
+    ["chacha20-poly1305", "ChaCha20-Poly1305"],
+    ["rsa-oaep", "RSA-OAEP 加解密"],
+    ["rsa-pss", "RSA-PSS 签名 / 验签"],
+  ];
+  CRY_ALGOS.forEach(([v, label]) => { const o = el("option", null, label); o.value = v; cryAlgo.appendChild(o); });
+  let cryDirection = bindSeg($("cryDir"), () => {});
+  cryIn.oninput = () => { $("cryInMeta").textContent = `${cryIn.value.length.toLocaleString()} 字符`; };
+  $("cryClear").onclick = () => { cryIn.value = ""; cryOut.value = ""; cryIn.oninput(); setChip($("cryChip"), ""); };
+
+  function fieldRow(labelText, control) {
+    const w = el("div", "field-row");
+    const l = el("label", "field", labelText);
+    w.appendChild(l); w.appendChild(control);
+    return w;
+  }
+  function buildCryParams() {
+    cryParams.innerHTML = "";
+    $("cryBanner").innerHTML = "";
+    const algo = cryAlgo.value;
+    if (algo.startsWith("rsa")) {
+      const keyBox = el("textarea");
+      keyBox.id = "cryRsaKey";
+      keyBox.style.minHeight = "96px";
+      keyBox.placeholder = algo === "rsa-oaep"
+        ? (cryDirection() === "encrypt" ? "-----BEGIN PUBLIC KEY-----（加密需要公钥）" : "-----BEGIN PRIVATE KEY-----（解密需要私钥）")
+        : "-----BEGIN PRIVATE KEY-----（签名）或 PUBLIC KEY（验签）";
+      const wrap = fieldRow("RSA 密钥（PEM）", keyBox);
+      wrap.classList.add("full-width");
+      cryParams.appendChild(wrap);
+      const row = el("div", "inline-actions full-width");
+      if (algo === "rsa-oaep") {
+        const gen = el("button", "btn small", "生成 2048 位密钥对");
+        gen.onclick = async () => {
+          gen.disabled = true; gen.textContent = "生成中…";
+          const r = await CR.rsaGenerate(2048);
+          gen.disabled = false; gen.textContent = "生成 2048 位密钥对";
+          if (!r.ok) return setChip($("cryChip"), "✕ " + r.error, "err");
+          keyBox.value = cryDirection() === "encrypt" ? r.data.public_pem : r.data.private_pem;
+          setChip($("cryChip"), "✓ 已生成密钥（请妥善保存私钥）", "ok");
+        };
+        row.appendChild(gen);
+        const imp = el("button", "btn small", "导入密钥文件");
+        const fileInput = document.createElement("input");
+        fileInput.type = "file"; fileInput.accept = ".pem,.key,.txt"; fileInput.style.display = "none";
+        imp.onclick = () => fileInput.click();
+        fileInput.onchange = async () => {
+          const f = fileInput.files[0];
+          if (f) { keyBox.value = await f.text(); status("已导入 " + f.name); }
+        };
+        row.appendChild(imp); row.appendChild(fileInput);
+      }
+      cryParams.appendChild(row);
+      $("cryHint").textContent = algo === "rsa-oaep"
+        ? "RSA-OAEP 一次最多加密 190 字节（2048 位密钥）；更大数据请使用 AES 加密后再用 RSA 加密密钥。"
+        : "使用 RSA-PSS + SHA-256 签名，输出 Base64 签名值。";
+      $("cryBanner").innerHTML = '<div class="banner info mt8">RSA-PSS 使用 SHA-256 与 32 字节盐长度，与桌面版一致。</div>';
+      return;
+    }
+    // ---- 对称 ----
+    const info = CR.ALGORITHMS[algo];
+    const srcSel = el("select");
+    [["passphrase", "口令 + PBKDF2 派生（推荐）"], ["raw", "原始密钥（Hex / Base64）"]].forEach(([v, t]) => {
+      const o = el("option", null, t); o.value = v; srcSel.appendChild(o);
+    });
+    const sizeSel = el("select");
+    (info.sizes || [256]).forEach((b) => {
+      const o = el("option", null, `${b} 位（AES-${b}）`); o.value = String(b); sizeSel.appendChild(o);
+    });
+    sizeSel.value = String((info.sizes || [256]).slice(-1)[0]);
+    if ((info.sizes || []).length < 2) sizeSel.disabled = true;
+
+    const passInput = document.createElement("input");
+    passInput.type = "password"; passInput.placeholder = "输入口令（不保存）";
+    const rawInput = document.createElement("input");
+    rawInput.type = "text"; rawInput.placeholder = "Hex 或 Base64 密钥（如 hex:9f86d081…）";
+
+    cryParams.appendChild(fieldRow("密钥来源", srcSel));
+    cryParams.appendChild(fieldRow("密钥长度", sizeSel));
+    const genBtn = el("button", "btn small", "生成随机密钥");
+    // 「生成随机密钥」紧跟原始密钥输入框（同一字段容器内），避免孤立成行
+    const rawField = el("div", "field-row");
+    rawField.appendChild(el("label", "field", "原始密钥"));
+    const rawLine = el("div", "inline-actions");
+    rawLine.appendChild(rawInput);
+    rawLine.appendChild(genBtn);
+    rawField.appendChild(rawLine);
+    const passWrap = fieldRow("口令", passInput);
+    const rawWrap = rawField;
+    cryParams.appendChild(passWrap);
+    cryParams.appendChild(rawWrap);
+    genBtn.onclick = () => {
+      const bits = Number(sizeSel.value) || 256;
+      const r = CR.generateRandomKey(bits / 8);
+      if (!r.ok) return setChip($("cryChip"), "✕ " + r.error, "err");
+      srcSel.value = "raw";
+      rawInput.value = "hex:" + r.data;
+      toggleSrc();
+      status(`已生成 ${bits} 位随机密钥（仅显示一次，请妥善保存）`);
+    };
+
+    const iterInput = document.createElement("input");
+    iterInput.type = "number"; iterInput.min = String(CR.MIN_ITERATIONS);
+    iterInput.max = String(CR.MAX_ITERATIONS); iterInput.step = "10000";
+    iterInput.value = String(CR.DEFAULT_ITERATIONS);
+    const encSel = el("select");
+    [["base64", "Base64"], ["hex", "Hex"]].forEach(([v, t]) => { const o = el("option", null, t); o.value = v; encSel.appendChild(o); });
+    const iterWrap = fieldRow("PBKDF2 迭代", iterInput);
+    cryParams.appendChild(iterWrap);
+    cryParams.appendChild(fieldRow("密文输出", encSel));
+
+    function toggleSrc() {
+      const raw = srcSel.value === "raw";
+      passWrap.style.display = raw ? "none" : "";
+      rawWrap.style.display = raw ? "" : "none";
+      iterWrap.style.display = raw ? "none" : "";
+    }
+    srcSel.onchange = toggleSrc;
+    toggleSrc();
+
+    $("cryHint").textContent = "Nonce / IV 每次加密自动随机生成；AEAD 认证 Tag 附加在密文尾部。";
+    const risk = CR.riskOf(algo);
+    if (risk === "err") {
+      $("cryBanner").innerHTML = '<div class="banner err mt8">⚠ ECB 模式不安全：相同明文块产生相同密文，泄露数据模式，且浏览器 Web Crypto 不提供该模式。</div>';
+    } else if (risk === "warn") {
+      $("cryBanner").innerHTML = '<div class="banner warn mt8">⚠ CBC 模式无认证能力：密文可被篡改而不被发现，建议改用 GCM。</div>';
+    } else {
+      $("cryBanner").innerHTML = '<div class="banner mt8">✓ 认证加密（AEAD）：密文被篡改时解密将直接失败，推荐日常使用。</div>';
+    }
+    // 暴露给执行函数
+    cryParams._state = { srcSel, sizeSel, passInput, rawInput, iterInput, encSel };
+  }
+  cryAlgo.onchange = buildCryParams;
+  buildCryParams();
+
+  $("cryRun").onclick = async () => {
+    const algo = cryAlgo.value;
+    const dir = cryDirection();
+    const text = cryIn.value;
+    if (!text.trim()) { setChip($("cryChip"), "✕ 输入为空：请输入待处理内容", "err"); return; }
+    const t0 = performance.now();
+    let result;
+    if (algo.startsWith("rsa")) {
+      const keyText = $("cryRsaKey")?.value || "";
+      if (!keyText.trim()) { setChip($("cryChip"), "✕ 请先粘贴或生成 RSA 密钥", "err"); return; }
+      if (algo === "rsa-oaep") {
+        if (dir === "encrypt") {
+          result = await CR.rsaEncrypt(keyText, enc(text));
+          if (result.ok) cryOut.value = toB64(result.data);
+        } else {
+          let raw;
+          try { raw = fromB64(text.replace(/\s+/g, "")); }
+          catch { result = { ok: false, error: "密文不是有效的 Base64" }; }
+          if (!result) {
+            result = await CR.rsaDecrypt(keyText, raw);
+            if (result.ok) cryOut.value = safeText(result.data);
+          }
+        }
+      } else {
+        if (dir === "encrypt") {
+          result = await CR.rsaSign(keyText, enc(text));
+          if (result.ok) cryOut.value = toB64(result.data);
+        } else {
+          const [msg, sigB64] = text.split(/\n-{3,}\n/);
+          if (!sigB64) { setChip($("cryChip"), "✕ 验签需要「原文」与「签名 Base64」，用一行 --- 分隔", "err"); return; }
+          let sig;
+          try { sig = fromB64(sigB64.trim()); }
+          catch { setChip($("cryChip"), "✕ 签名不是有效的 Base64", "err"); return; }
+          result = await CR.rsaVerify(keyText, enc(msg), sig);
+          if (result.ok) cryOut.value = result.data ? "✓ 验签通过：签名与原文匹配" : "✕ 验签失败：签名不匹配";
+        }
+      }
+    } else {
+      const S = cryParams._state;
+      const cfg = {
+        algorithm: algo,
+        key_size: Number(S.sizeSel.value) || 256,
+        key_source: S.srcSel.value,
+        passphrase: S.passInput.value,
+        raw_key: S.rawInput.value,
+        pbkdf2_iterations: Number(S.iterInput.value) || CR.DEFAULT_ITERATIONS,
+      };
+      if (dir === "encrypt") {
+        result = await CR.encrypt(enc(text), cfg);
+        if (result.ok) cryOut.value = S.encSel.value === "hex" ? hexOf(result.data) : toB64(result.data);
+      } else {
+        let data;
+        try {
+          data = S.encSel.value === "hex" ? unhexOf(text) : fromB64(text.replace(/\s+/g, ""));
+        } catch {
+          setChip($("cryChip"), "✕ 密文格式与所选「密文输出」不一致（Base64 / Hex）", "err");
+          return;
+        }
+        result = await CR.decrypt(data, cfg);
+        if (result.ok) cryOut.value = safeText(result.data);
+      }
+    }
+    if (!result || !result.ok) {
+      setChip($("cryChip"), "✕ " + (result?.error || "处理失败"), "err");
+      status("失败：" + (result?.error || ""));
+      return;
+    }
+    setChip($("cryChip"), `✓ 处理成功 · ${Math.round(performance.now() - t0)} 毫秒`, "ok");
+    status("处理完成");
+  };
+  function hexOf(bytes) { return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(""); }
+  function unhexOf(s) {
+    const c = s.replace(/\s+/g, "").replace(/0x/gi, "");
+    if (!/^[0-9a-fA-F]*$/.test(c) || c.length % 2) throw new Error("bad hex");
+    const out = new Uint8Array(c.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(c.substr(i * 2, 2), 16);
+    return out;
+  }
+  function safeText(bytes) {
+    try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
+    catch {
+      return `[二进制结果 ${bytes.length.toLocaleString()} 字节]\n${hexOf(bytes.slice(0, 96)).replace(/(..)/g, "$1 ").toUpperCase()}\n\n请点击「复制结果」或改用文件处理页导出。`;
+    }
+  }
+  $("cryCopy").onclick = async () => {
+    if (!cryOut.value) return status("没有可复制的结果");
+    try { await navigator.clipboard.writeText(cryOut.value); status("已复制结果"); }
+    catch { cryOut.select(); document.execCommand("copy"); }
+  };
+
+  /* ================= 压缩解压 ================= */
+  const cpIn = $("cpIn"), cpOut = $("cpOut");
+  [["gzip", "GZIP"], ["zlib", "ZLIB"], ["deflate", "DEFLATE（裸流）"]].forEach(([v, t]) => {
+    const o = el("option", null, t); o.value = v; $("cpFmt").appendChild(o);
+  });
+  let cpDirection = bindSeg($("cpDir"), () => {});
+  cpIn.oninput = () => { $("cpInMeta").textContent = `${cpIn.value.length.toLocaleString()} 字符`; };
+  $("cpClear").onclick = () => { cpIn.value = ""; cpOut.value = ""; cpIn.oninput(); setChip($("cpChip"), ""); };
+  $("cpRun").onclick = async () => {
+    const text = cpIn.value;
+    if (!text.trim()) { setChip($("cpChip"), "✕ 输入为空", "err"); return; }
+    const t0 = performance.now();
+    let result;
+    if (cpDirection() === "compress") {
+      result = await CP.compressBytes(enc(text), $("cpFmt").value);
+      if (result.ok) {
+        cpOut.value = $("cpB64").checked ? toB64(result.data) : hexOf(result.data).replace(/(..)/g, "$1 ").toUpperCase();
+        setChip($("cpChip"),
+          `✓ 压缩成功 · ${result.meta.in_bytes.toLocaleString()} B → ${result.meta.out_bytes.toLocaleString()} B · ${Math.round(performance.now() - t0)} 毫秒`, "ok");
+      }
+    } else {
+      let data = null;
+      const compact = text.replace(/\s+/g, "");
+      // 自动识别 Base64 / Hex
+      if (/^[0-9a-fA-F]+$/.test(compact) && compact.length % 2 === 0 && compact.length >= 16) {
+        try { data = unhexOf(compact); } catch {}
+      }
+      if (!data) { try { data = fromB64(compact); } catch {} }
+      if (!data) data = enc(text);
+      result = await CP.decompressBytes(data, $("cpFmt").value, CP.DEFAULT_CAP_MB);
+      if (result.ok) {
+        cpOut.value = safeText(result.data);
+        setChip($("cpChip"),
+          `✓ 解压成功 · ${result.meta.in_bytes.toLocaleString()} B → ${result.meta.out_bytes.toLocaleString()} B · ${Math.round(performance.now() - t0)} 毫秒`, "ok");
+      }
+    }
+    if (!result.ok) { setChip($("cpChip"), "✕ " + result.error, "err"); status("失败：" + result.error); }
+    else status("处理完成");
+  };
+  $("cpCopy").onclick = async () => {
+    if (!cpOut.value) return status("没有可复制的结果");
+    try { await navigator.clipboard.writeText(cpOut.value); status("已复制结果"); }
+    catch { cpOut.select(); document.execCommand("copy"); }
+  };
+
+  /* ================= 哈希 ================= */
+  const hsIn = $("hsIn"), hsList = $("hsList");
+  const hsInputs = {};
+  H.HASH_ALGOS.forEach(([id, name]) => {
+    const row = el("div", "hash-row");
+    row.appendChild(el("span", "name", name));
+    const inp = document.createElement("input");
+    inp.readOnly = true; inp.placeholder = "—";
+    row.appendChild(inp);
+    const copy = el("button", "btn small", "复制");
+    copy.onclick = async () => {
+      if (!inp.value) return;
+      try { await navigator.clipboard.writeText(inp.value); status(`已复制 ${name}`); }
+      catch { inp.select(); document.execCommand("copy"); }
+    };
+    row.appendChild(copy);
+    hsList.appendChild(row);
+    hsInputs[id] = inp;
+  });
+  let hashTimer = null;
+  async function recomputeHashes() {
+    const text = hsIn.value;
+    $("hsInMeta").textContent = `${text.length.toLocaleString()} 字符`;
+    const t0 = performance.now();
+    const r = await H.textHashAll(text);
+    if (!r.ok) {
+      Object.values(hsInputs).forEach((i) => { i.value = ""; });
+      setChip($("hsChip"), "✕ " + r.error, "err");
+      return;
+    }
+    for (const [id, inp] of Object.entries(hsInputs)) inp.value = r.data[id] || "";
+    setChip($("hsChip"), `✓ 已计算 ${Object.keys(r.data).length} 种 · ${text.length.toLocaleString()} 字符 · ${Math.round(performance.now() - t0)} 毫秒`, "ok");
+  }
+  hsIn.oninput = () => {
+    $("hsInMeta").textContent = `${hsIn.value.length.toLocaleString()} 字符`;
+    clearTimeout(hashTimer);
+    hashTimer = setTimeout(recomputeHashes, 300);
+  };
+  $("hsClear").onclick = () => { hsIn.value = ""; hsIn.oninput(); };
+  $("hsFileBtn").onclick = () => $("hsFile").click();
+  $("hsFile").onchange = async () => {
+    const f = $("hsFile").files[0];
+    if (!f) return;
+    setChip($("hsChip"), "… 正在计算文件哈希", "info");
+    const r = await H.fileHash(f, ["sha256", "md5", "sha1"]);
+    if (!r.ok) { setChip($("hsChip"), "✕ " + r.error, "err"); return; }
+    Object.entries(hsInputs).forEach(([id, inp]) => { inp.value = r.data[id] || "—"; });
+    setChip($("hsChip"), `✓ ${f.name} · ${r.meta.in_bytes.toLocaleString()} 字节`, "ok");
+    status("文件哈希计算完成");
+  };
+  $("hsCopyAll").onclick = async () => {
+    const lines = H.HASH_ALGOS.filter(([id]) => hsInputs[id].value).map(([id, name]) => `${name}: ${hsInputs[id].value}`);
+    if (!lines.length) return status("没有可复制的结果");
+    try { await navigator.clipboard.writeText(lines.join("\n")); status("已复制全部哈希"); }
+    catch { status("复制失败"); }
+  };
+  function cmpUpdate() {
+    const r = H.compareHash($("hsCmpA").value, $("hsCmpB").value);
+    if (!r.ok) return setChip($("hsCmpChip"), r.error, "info");
+    setChip($("hsCmpChip"), r.data ? "✓ 两个哈希值相同" : "✕ 两个哈希值不同", r.data ? "ok" : "err");
+  }
+  $("hsCmpA").oninput = cmpUpdate;
+  $("hsCmpB").oninput = cmpUpdate;
+  hsIn.value = "";
+  recomputeHashes();
+
+  /* ================= 智能解码 ================= */
+  for (let i = 1; i <= 10; i++) {
+    const o = el("option", null, String(i)); o.value = String(i);
+    if (i === 5) o.selected = true;
+    $("smLayers").appendChild(o);
+  }
+  $("smIn").oninput = () => { $("smInMeta").textContent = `${$("smIn").value.length.toLocaleString()} 字符`; };
+  $("smClear").onclick = () => {
+    $("smIn").value = ""; $("smOut").value = ""; $("smSteps").innerHTML = "";
+    $("smChain").textContent = ""; setChip($("smChip"), ""); $("smIn").oninput();
+  };
+  $("smRun").onclick = async () => {
+    const text = $("smIn").value;
+    if (!text.trim()) { setChip($("smChip"), "✕ 请先输入待解码内容", "err"); return; }
+    $("smRun").disabled = true; $("smRun").textContent = "分析中…";
+    setChip($("smChip"), "… 正在分析", "info");
+    const r = await SM(text, Number($("smLayers").value), CP.DEFAULT_CAP_MB);
+    $("smRun").disabled = false; $("smRun").textContent = "开始分析";
+    if (!r.ok) { setChip($("smChip"), "✕ " + r.error, "err"); return; }
+    const d = r.data;
+    $("smOut").value = d.finalText;
+    $("smChain").textContent = "链路：" + d.chain + " · " + r.meta.note;
+    setChip($("smChip"), `✓ 完成 · ${d.layersUsed} 层`, "ok");
+    const box = $("smSteps");
+    box.innerHTML = "";
+    d.steps.forEach((s) => {
+      const w = el("div", "step");
+      const head = el("div", "step-head");
+      head.appendChild(el("span", "step-idx", "第 " + s.index + " 层"));
+      head.appendChild(el("span", "step-action", s.action));
+      head.appendChild(el("span", "step-detail", s.detail));
+      w.appendChild(head);
+      const p1 = el("div", "step-preview", `输入（${s.beforeSize}）：${s.beforePreview}`);
+      const p2 = el("div", "step-preview", `输出（${s.afterSize}）：${s.afterPreview}`);
+      w.appendChild(p1); w.appendChild(p2);
+      box.appendChild(w);
+    });
+    status(`智能解码完成，共 ${d.layersUsed} 层`);
+  };
+  $("smCopy").onclick = async () => {
+    if (!$("smOut").value) return status("没有可复制的结果");
+    try { await navigator.clipboard.writeText($("smOut").value); status("已复制结果"); }
+    catch { $("smOut").select(); document.execCommand("copy"); }
+  };
+
+  /* ================= 文件处理 ================= */
+  let pickedFile = null;
+  let saveBytes = null, saveName = "";
+  $("flPick").onclick = () => $("flFile").click();
+  $("flFile").onchange = () => {
+    pickedFile = $("flFile").files[0] || null;
+    if (!pickedFile) return;
+    $("flMeta").textContent = `${pickedFile.name} · ${pickedFile.size.toLocaleString()} 字节`;
+    $("flRun").disabled = false;
+  };
+  $("flRun").onclick = async () => {
+    if (!pickedFile) return;
+    $("flRun").disabled = true; $("flRun").textContent = "处理中…";
+    setChip($("flChip"), "… 正在处理", "info");
+    try {
+      const buf = new Uint8Array(await pickedFile.arrayBuffer());
+      const op = $("flOp").value;
+      saveBytes = null; saveName = "";
+      if (op === "base64") {
+        $("flOut").value = toB64(buf);
+        setChip($("flChip"), `✓ Base64 编码 · ${buf.length.toLocaleString()} B → ${$("flOut").value.length.toLocaleString()} 字符`, "ok");
+      } else if (op === "hex") {
+        $("flOut").value = hexOf(buf);
+        setChip($("flChip"), `✓ Hex 编码 · ${buf.length.toLocaleString()} B → ${$("flOut").value.length.toLocaleString()} 字符`, "ok");
+      } else if (op === "hash") {
+        const r = await H.fileHash(pickedFile, ["sha256", "md5", "sha1"]);
+        if (!r.ok) throw new Error(r.error);
+        $("flOut").value = ["sha256", "md5", "sha1"].map((a) => `${a.toUpperCase()}: ${r.data[a]}`).join("\n");
+        setChip($("flChip"), `✓ 文件哈希 · ${buf.length.toLocaleString()} 字节`, "ok");
+      } else if (op === "gzip") {
+        const r = await CP.compressBytes(buf, "gzip");
+        if (!r.ok) throw new Error(r.error);
+        saveBytes = r.data; saveName = pickedFile.name + ".gz";
+        $("flOut").value = `[GZIP 压缩结果 ${r.data.length.toLocaleString()} 字节]\n源文件 ${buf.length.toLocaleString()} 字节\n\n点击「保存结果」导出 ${saveName}`;
+        setChip($("flChip"), `✓ GZIP 压缩 · ${buf.length.toLocaleString()} B → ${r.data.length.toLocaleString()} B`, "ok");
+      } else {
+        const fmt = CP.sniff(buf) || "gzip";
+        const r = await CP.decompressBytes(buf, fmt, CP.DEFAULT_CAP_MB);
+        if (!r.ok) throw new Error(r.error);
+        $("flOut").value = safeText(r.data);
+        setChip($("flChip"), `✓ ${CP.FORMAT_NAMES[fmt]} 解压 · ${buf.length.toLocaleString()} B → ${r.data.length.toLocaleString()} B`, "ok");
+      }
+      $("flSave").disabled = !saveBytes;
+      status("文件处理完成");
+    } catch (e) {
+      setChip($("flChip"), "✕ " + e.message, "err");
+      status("失败：" + e.message);
+    } finally {
+      $("flRun").disabled = false; $("flRun").textContent = "开始处理";
+    }
+  };
+  $("flCopy").onclick = async () => {
+    if (!$("flOut").value) return status("没有可复制的结果");
+    try { await navigator.clipboard.writeText($("flOut").value); status("已复制结果"); }
+    catch { $("flOut").select(); document.execCommand("copy"); }
+  };
+  $("flSave").onclick = () => {
+    if (!saveBytes) return;
+    download(saveBytes, saveName || "output.bin");
+    status("已导出 " + saveName);
+  };
+
+  /* ================= 关于 / 自检 ================= */
+  const VERSION = "1.0";
+  $("aboutVer").textContent = "v" + VERSION + " · 单文件离线版";
+  $("verLabel").textContent = "Web v" + VERSION;
+  async function runSelfTest(chipNode, detailNode) {
+    setChip(chipNode, "… 正在自检", "info");
+    if (detailNode) detailNode.textContent = "";
+    const t0 = performance.now();
+    const r = await globalThis.DT.selftest();
+    const ms = Math.round(performance.now() - t0);
+    setChip(chipNode, r.failed === 0 ? `✓ 自检通过 ${r.passed}/${r.passed} · ${ms} 毫秒` : `✕ ${r.failed} 项失败`, r.failed === 0 ? "ok" : "err");
+    if (detailNode) {
+      detailNode.textContent = r.failed === 0
+        ? `全部 ${r.passed} 项算法校验通过（编码 16 项 · 哈希 9 项 · 加密 8 项）`
+        : r.items.filter((i) => !i.pass).map((i) => `${i.name}: ${i.extra}`).join("；");
+    }
+    return r;
+  }
+  $("selfTestBtn").onclick = async () => {
+    status("正在运行自检…");
+    const r = await runSelfTest($("aboutTestChip"), $("aboutTestDetail"));
+    go("about");
+    status(r.failed === 0 ? `自检通过：${r.passed} 项全部正常` : `自检发现 ${r.failed} 项异常`);
+  };
+  $("aboutSelfTest").onclick = () => runSelfTest($("aboutTestChip"), $("aboutTestDetail"));
+
+  /* ================= 初始化 ================= */
+  if (!CP.supportsCompression) {
+    $("cpRun").disabled = true;
+    setChip($("cpChip"), "当前浏览器不支持 CompressionStream", "err");
+  }
+  status("就绪 · 完全离线运行 · 算法自检可通过左下角 ⚙ 运行");
+  $("statusRight").textContent = `UTF-8 · 离线模式 · Web v${VERSION}`;
+  window.__dtReady = true;
+})();
+
+</script>
+</body>
+</html>

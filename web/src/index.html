@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DevToolkit Web · 离线编码解码工具箱</title>
+<style>/*__CSS__*/</style>
+</head>
+<body>
+
+<aside>
+  <div class="brand">
+    <div class="logo">DT</div>
+    <div>
+      <div class="brand-name">DevToolkit</div>
+      <div class="brand-ver" id="verLabel">Web v1.0</div>
+    </div>
+  </div>
+  <div class="side-title">功能导航</div>
+  <nav id="nav"></nav>
+  <div class="side-foot">
+    <button class="icon-btn" id="themeBtn" title="切换深色 / 浅色（Ctrl+T）">◐</button>
+    <button class="icon-btn" id="selfTestBtn" title="运行算法自检">⚙</button>
+  </div>
+</aside>
+
+<main>
+  <div class="scroll" id="scrollArea">
+
+    <!-- ================= 编码解码 ================= -->
+    <section class="page active" id="page-encode">
+      <h1>编码解码</h1>
+      <div class="sub">12 种编码双向转换 · UTF-8 中文安全 · 多行批量逐行处理</div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">输入内容</span>
+          <span class="meta" id="encInMeta">0 字符</span>
+          <span class="spacer"></span>
+          <button class="btn small" id="encPaste">粘贴</button>
+          <button class="btn small" id="encClear">清空</button>
+        </div>
+        <textarea id="encIn" placeholder="在此粘贴或输入内容…"></textarea>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <label class="field" style="margin:0">算法</label>
+          <select id="encAlgo" style="width:200px"></select>
+          <div class="seg" id="encDir">
+            <button data-dir="encode" aria-pressed="true">编码</button>
+            <button data-dir="decode" aria-pressed="false">解码</button>
+          </div>
+          <label class="row" style="gap:6px;margin:0">
+            <input type="checkbox" id="encBatch"> <span class="meta">逐行批量</span>
+          </label>
+          <span class="spacer"></span>
+          <button class="btn" id="encSwap">交换</button>
+          <button class="btn primary" id="encRun">执行</button>
+        </div>
+        <div class="hint" id="encHint"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">输出结果</span>
+          <span class="chip" id="encChip"></span>
+          <span class="spacer"></span>
+          <button class="btn small" id="encCopy">复制结果</button>
+        </div>
+        <textarea id="encOut" readonly placeholder="结果将显示在这里"></textarea>
+      </div>
+    </section>
+
+    <!-- ================= 加密解密 ================= -->
+    <section class="page" id="page-crypto">
+      <h1>加密解密</h1>
+      <div class="sub">AES-GCM / AES-CBC / ChaCha20-Poly1305 · RSA-OAEP 加解密 · RSA-PSS 签名验签</div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">输入内容</span>
+          <span class="meta" id="cryInMeta">0 字符</span>
+          <span class="spacer"></span>
+          <button class="btn small" id="cryClear">清空</button>
+        </div>
+        <textarea id="cryIn" placeholder="在此粘贴或输入内容…"></textarea>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <label class="field" style="margin:0">算法</label>
+          <select id="cryAlgo" style="width:220px"></select>
+          <div class="seg" id="cryDir">
+            <button data-dir="encrypt" aria-pressed="true">加密</button>
+            <button data-dir="decrypt" aria-pressed="false">解密</button>
+          </div>
+          <span class="spacer"></span>
+          <button class="btn primary" id="cryRun">执行</button>
+        </div>
+      </div>
+
+      <div class="card" id="cryParamsCard">
+        <div class="card-head"><span class="card-title">密钥与参数</span><span class="meta">按所选算法动态显示</span></div>
+        <div class="grid2" id="cryParams"></div>
+        <div class="hint" id="cryHint"></div>
+        <div id="cryBanner"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">输出结果</span>
+          <span class="chip" id="cryChip"></span>
+          <span class="spacer"></span>
+          <button class="btn small" id="cryCopy">复制结果</button>
+        </div>
+        <textarea id="cryOut" readonly placeholder="结果将显示在这里"></textarea>
+      </div>
+    </section>
+
+    <!-- ================= 压缩解压 ================= -->
+    <section class="page" id="page-compress">
+      <h1>压缩解压</h1>
+      <div class="sub">GZIP / ZLIB / DEFLATE · 解压输出上限防护 · 输出可用 Base64 展示</div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">输入内容</span>
+          <span class="meta" id="cpInMeta">0 字符</span>
+          <span class="spacer"></span>
+          <button class="btn small" id="cpClear">清空</button>
+        </div>
+        <textarea id="cpIn" placeholder="在此粘贴文本，或粘贴 Base64 / Hex 编码的压缩数据…"></textarea>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <label class="field" style="margin:0">压缩格式</label>
+          <select id="cpFmt" style="width:150px"></select>
+          <div class="seg" id="cpDir">
+            <button data-dir="compress" aria-pressed="true">压缩</button>
+            <button data-dir="decompress" aria-pressed="false">解压</button>
+          </div>
+          <label class="row" style="gap:6px;margin:0">
+            <input type="checkbox" id="cpB64" checked> <span class="meta">输出以 Base64 显示</span>
+          </label>
+          <span class="spacer"></span>
+          <button class="btn primary" id="cpRun">执行</button>
+        </div>
+        <div class="hint">浏览器端支持 GZIP / ZLIB / DEFLATE；ZIP / Brotli / Zstandard / LZ4 无原生实现，会明确提示。</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">输出结果</span>
+          <span class="chip" id="cpChip"></span>
+          <span class="spacer"></span>
+          <button class="btn small" id="cpCopy">复制结果</button>
+        </div>
+        <textarea id="cpOut" readonly placeholder="结果将显示在这里"></textarea>
+      </div>
+    </section>
+
+    <!-- ================= 哈希 ================= -->
+    <section class="page" id="page-hash">
+      <h1>哈希计算</h1>
+      <div class="sub">10 种算法同屏 · 输入即自动计算 · 支持文件哈希与双值比较</div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">输入内容</span>
+          <span class="meta" id="hsInMeta">0 字符</span>
+          <span class="spacer"></span>
+          <button class="btn small" id="hsFileBtn">计算文件哈希</button>
+          <input type="file" id="hsFile" style="display:none">
+          <button class="btn small" id="hsClear">清空</button>
+        </div>
+        <textarea id="hsIn" placeholder="在此粘贴或输入内容，哈希将自动计算…"></textarea>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">哈希结果</span>
+          <span class="meta">输入变化后自动重算</span>
+          <span class="chip" id="hsChip"></span>
+          <span class="spacer"></span>
+          <button class="btn small" id="hsCopyAll">复制全部</button>
+        </div>
+        <div class="hash-list" id="hsList"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">哈希比较</span><span class="meta">忽略大小写与空白</span></div>
+        <div class="row"><label class="field" style="margin:0;width:70px">哈希值 A</label><input type="text" id="hsCmpA"></div>
+        <div class="row mt8"><label class="field" style="margin:0;width:70px">哈希值 B</label><input type="text" id="hsCmpB"></div>
+        <div class="mt8"><span class="chip" id="hsCmpChip"></span></div>
+      </div>
+    </section>
+
+    <!-- ================= 智能解码 ================= -->
+    <section class="page" id="page-smart">
+      <h1>智能解码</h1>
+      <div class="sub">自动尝试「编码 + 压缩」多层链路 · 逐步展示处理过程</div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">输入内容</span>
+          <span class="meta" id="smInMeta">0 字符</span>
+          <span class="spacer"></span>
+          <button class="btn small" id="smClear">清空</button>
+        </div>
+        <textarea id="smIn" placeholder="在此粘贴疑似多层编码的内容…"></textarea>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <label class="field" style="margin:0">最大解码层数</label>
+          <select id="smLayers" style="width:90px"></select>
+          <span class="spacer"></span>
+          <button class="btn primary" id="smRun">开始分析</button>
+        </div>
+        <div class="hint">防压缩炸弹：单次解压输出上限 64 MB；已处理内容不会重复解码</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">解码结果</span>
+          <span class="chip" id="smChip"></span>
+          <span class="spacer"></span>
+          <button class="btn small" id="smCopy">复制结果</button>
+        </div>
+        <div class="meta" id="smChain"></div>
+        <textarea id="smOut" readonly class="mt8" placeholder="结果将显示在这里"></textarea>
+        <div class="steps mt12" id="smSteps"></div>
+      </div>
+    </section>
+
+    <!-- ================= 文件处理 ================= -->
+    <section class="page" id="page-files">
+      <h1>文件处理</h1>
+      <div class="sub">二进制安全读取 · Base64 / Hex 编码 · 多算法校验值 · GZIP 压缩解压</div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">选择文件</span>
+          <span class="meta" id="flMeta">未选择</span>
+          <span class="spacer"></span>
+          <button class="btn" id="flPick">选择文件</button>
+          <input type="file" id="flFile" style="display:none">
+        </div>
+        <div class="row mt8">
+          <label class="field" style="margin:0">操作</label>
+          <select id="flOp" style="width:230px">
+            <option value="base64">Base64 编码</option>
+            <option value="hex">Hex 编码</option>
+            <option value="hash">SHA-256 / MD5 / SHA-1 校验值</option>
+            <option value="gzip">GZIP 压缩（导出 .gz）</option>
+            <option value="gunzip">GZIP 解压（自动识别）</option>
+          </select>
+          <span class="spacer"></span>
+          <button class="btn primary" id="flRun" disabled>开始处理</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">处理结果</span>
+          <span class="chip" id="flChip"></span>
+          <span class="spacer"></span>
+          <button class="btn small" id="flCopy">复制结果</button>
+          <button class="btn small" id="flSave" disabled>保存结果</button>
+        </div>
+        <textarea id="flOut" readonly placeholder="结果将显示在这里"></textarea>
+      </div>
+
+      <div class="banner info">
+        读取始终按字节处理（二进制安全）；文本类结果才尝试 UTF-8 解码。所有计算均在本机浏览器完成。
+      </div>
+    </section>
+
+    <!-- ================= 关于 ================= -->
+    <section class="page" id="page-about">
+      <h1>关于软件</h1>
+      <div class="sub">纯离线运行的浏览器版编码解码工具箱</div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">DevToolkit Web</span>
+          <span class="meta" id="aboutVer"></span>
+        </div>
+        <div class="grid2">
+          <div><span class="meta">运行方式</span><div>单文件 HTML，双击即用</div></div>
+          <div><span class="meta">依赖</span><div>无（零依赖、零网络）</div></div>
+          <div><span class="meta">密码学实现</span><div>浏览器原生 Web Crypto</div></div>
+          <div><span class="meta">环境要求</span><div>Chrome / Edge / Firefox / Safari 现代版本</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">能力对照</span></div>
+        <table>
+          <thead><tr><th>功能</th><th>浏览器版</th></tr></thead>
+          <tbody>
+            <tr><td>12 种编码解码</td><td>全部支持</td></tr>
+            <tr><td>哈希 10 种</td><td>全部支持（MD5 / BLAKE2 纯 JS 实现）</td></tr>
+            <tr><td>AES-GCM / AES-CBC / ChaCha20-Poly1305</td><td>支持，信封格式与桌面版兼容</td></tr>
+            <tr><td>AES-ECB</td><td>不支持（Web Crypto 明确排除该不安全模式）</td></tr>
+            <tr><td>RSA-OAEP / RSA-PSS</td><td>支持（密钥 2048 / 3072 / 4096 位）</td></tr>
+            <tr><td>压缩 GZIP / ZLIB / DEFLATE</td><td>支持（原生 CompressionStream）</td></tr>
+            <tr><td>ZIP / Brotli / Zstd / LZ4</td><td>不支持（浏览器无原生实现）</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="card-title">自检</span></div>
+        <div class="row">
+          <button class="btn" id="aboutSelfTest">运行算法自检</button>
+          <span class="chip" id="aboutTestChip"></span>
+        </div>
+        <div class="hint" id="aboutTestDetail"></div>
+      </div>
+
+      <div class="banner ok">
+        完全离线：不联网、不上传、不收集任何数据。所有计算在本地浏览器完成，关闭标签页即彻底清除。
+      </div>
+    </section>
+
+  </div>
+  <div class="statusbar">
+    <span id="status">就绪 · 完全离线运行</span>
+    <span class="spacer"></span>
+    <span id="statusRight">UTF-8 · 离线模式</span>
+  </div>
+</main>
+
+<!--__SCRIPTS__-->
+</body>
+</html>
