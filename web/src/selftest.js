@@ -24,6 +24,28 @@ globalThis.DT.selftest = async function () {
   t("qp 往返", CD.qpDecode(CD.qpEncode("中文 =x").data).data === "中文 =x");
   t("ascii 拒绝宽松数", !CD.asciiDecode("1_0").ok);
   t("b64 拒绝 4n+1", !CD.b64Decode("A").ok);
+  // 字符集（UTF-16LE / Latin-1 编码 + GBK 解码；跨平台对照 Python 权威值）
+  t("utf16le 编码", (() => {
+    const r = CD.b64Encode("A中", { charset: "utf-16le" });
+    // Python: base64.b64encode("A中".encode("utf-16-le")) == "QQAtTg=="
+    return r.ok && r.data === "QQAtTg==";
+  })());
+  t("utf16le 解码", CD.b64Decode("QQAtTg==", { charset: "utf-16le" }).data === "A中");
+  t("latin-1 编码", (() => {
+    const r = CD.b64Encode("éx", { charset: "latin-1" });
+    // Python: base64.b64encode("éx".encode("latin-1")) == "6Xg="
+    return r.ok && r.data === "6Xg=";
+  })());
+  t("gbk 解码", (() => {
+    // Python: base64.b64encode("中".encode("gbk")) == "1tA="
+    const r = CD.b64Decode("1tA=", { charset: "gbk" });
+    return r.ok && r.data === "中";
+  })());
+  t("gbk 编码被明确拒绝", (() => {
+    const r = CD.b64Encode("中", { charset: "gbk" });
+    return !r.ok && r.error.includes("无法「编码」");
+  })());
+  t("latin-1 超 0xFF 被拒", !CD.b64Encode("中", { charset: "latin-1" }).ok);
 
   // ---- 哈希（Python hashlib 权威值）----
   const V = {

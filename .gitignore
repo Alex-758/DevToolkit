@@ -8,6 +8,10 @@ __pycache__/
 # PyInstaller 构建产物
 build/
 dist/
+# 浏览器自动化临时配置目录
+web/.edgetmp*/
+.edge*/
+
 # 例外：Web 版单文件产物随仓库分发（浏览器直接打开，无需构建）
 !web/dist/
 !web/dist/DevToolkit.html

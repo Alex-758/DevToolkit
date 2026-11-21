@@ -357,16 +357,51 @@ function unB64(s) {
 function encodeText(text, charset) {
   const cs = (charset || "utf-8").toLowerCase();
   if (cs === "utf-8" || cs === "utf8") return utf8(text);
-  // 浏览器 TextEncoder 仅支持 UTF-8：GBK 等用 TextDecoder 反向验证后降级提示
-  throw new Error(`浏览器仅支持 UTF-8 字符集（当前选择 ${charset}）`);
+  if (cs === "utf-16le" || cs === "utf16le") {
+    // 浏览器无 UTF-16LE 编码器：手工逐码元输出（代理对天然正确）
+    const out = new Uint8Array(text.length * 2);
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      out[i * 2] = c & 0xff; out[i * 2 + 1] = (c >> 8) & 0xff;
+    }
+    return out;
+  }
+  if (cs === "latin-1" || cs === "latin1" || cs === "iso-8859-1") {
+    const out = new Uint8Array(text.length);
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      if (c > 0xff) throw new Error(`文本包含 Latin-1（单字节）范围外的字符（「${text[i]}」），浏览器端无法编码 GBK / Latin-1 之外的扩展字符集`);
+      out[i] = c;
+    }
+    return out;
+  }
+  // GBK / Big5 等多字节编码：浏览器只有解码器没有编码器（无码表），明确报错
+  throw new Error(`浏览器无法「编码」为 ${charset.toUpperCase()}（无编码码表，仅支持解码）。编码请改用 UTF-8 / UTF-16LE / Latin-1`);
 }
 function decodeText(bytes, charset) {
   const cs = (charset || "utf-8").toLowerCase();
   if (cs === "utf-8" || cs === "utf8") return fromUtf8(bytes);
+  if (cs === "utf-16le" || cs === "utf16le") {
+    // 原生 TextDecoder("utf-16le") 各内核支持不一，手工解码最稳
+    let s = "";
+    for (let i = 0; i + 1 < bytes.length; i += 2) {
+      s += String.fromCharCode(bytes[i] | (bytes[i + 1] << 8));
+    }
+    return s;
+  }
+  if (cs === "latin-1" || cs === "latin1" || cs === "iso-8859-1") {
+    let s = "";
+    for (const b of bytes) s += String.fromCharCode(b);
+    return s;
+  }
+  // GBK / Big5 等：浏览器（Chromium / WebKit / Gecko）原生解码器支持
   try {
-    return new TextDecoder(charset).decode(bytes);
-  } catch {
-    throw new Error(`不支持的字符集：${charset}`);
+    return new TextDecoder(charset, { fatal: true }).decode(bytes);
+  } catch (e) {
+    if (e.name === "RangeError" || e.name === "TypeError") {
+      throw new Error(`不支持的字符集：${charset}`);
+    }
+    throw new Error(`解码结果不是有效的 ${charset} 文本`);
   }
 }
 

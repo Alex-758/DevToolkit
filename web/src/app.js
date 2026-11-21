@@ -92,8 +92,28 @@
     o.value = id;
     encAlgo.appendChild(o);
   });
-  const HINTS = {
-    base64: "每 3 字节映射为 4 字符；标准字母表 A–Z a–z 0–9 + /，= 作为填充。",
+  // 字符集：仅字节型编解码器使用（与桌面版 params_schema 对齐）
+  const CHARSET_CODECS = new Set(["base64", "base64url", "base32", "hex", "base58", "base62", "qp"]);
+  const encCharset = el("select");
+  encCharset.id = "encCharset";
+  [["utf-8", "UTF-8（默认）"], ["utf-16le", "UTF-16LE"], ["gbk", "GBK（仅解码）"], ["latin-1", "Latin-1"]].forEach(([v, t]) => {
+    const o = el("option", null, t); o.value = v; encCharset.appendChild(o);
+  });
+  const charsetLabel = el("label", "field", "字符集");
+  charsetLabel.id = "encCharsetLabel";
+  const charsetWrap = el("span");
+  charsetWrap.style.cssText = "display:inline-flex;align-items:center;gap:6px;margin:0";
+  charsetWrap.appendChild(charsetLabel);
+  charsetWrap.appendChild(encCharset);
+  $("encHint").parentNode.insertBefore(charsetWrap, $("encHint"));
+  encCharset.style.width = "150px";
+  function syncCharsetVisibility() {
+    const use = CHARSET_CODECS.has(encAlgo.value);
+    charsetWrap.style.display = use ? "inline-flex" : "none";
+  }
+  syncCharsetVisibility();
+
+  const HINTS = {    base64: "每 3 字节映射为 4 字符；标准字母表 A–Z a–z 0–9 + /，= 作为填充。",
     base64url: "使用 - _ 替代 + / 并省略填充，可直接用于 URL 与 JWT。",
     base32: "RFC 4648：字母表 A–Z 2–7，= 填充，常用于 TOTP 与 DNS 记录。",
     hex: "支持大小写、有无空格分隔及 0x 前缀的输入。",
@@ -106,10 +126,16 @@
     rot13: "仅作用于 A–Z a–z 26 个字母，其余字符保持不变；编码即解码。",
     qp: "RFC 2045 =XX 十六进制转义，常用于邮件 MIME 正文。",
   };
-  function syncEncHint() { $("encHint").textContent = HINTS[encAlgo.value] || ""; }
-  encAlgo.onchange = syncEncHint;
+  function syncEncHint() {
+    let h = HINTS[encAlgo.value] || "";
+    if (CHARSET_CODECS.has(encAlgo.value)) {
+      h += " 字符集：GBK / Big5 仅支持解码（浏览器无编码码表）；编码可用 UTF-8 / UTF-16LE / Latin-1。";
+    }
+    $("encHint").textContent = h;
+  }
+  encAlgo.onchange = () => { syncEncHint(); syncCharsetVisibility(); };
   syncEncHint();
-  let encDirection = bindSeg($("encDir"), () => {});
+  let encDirection = bindSeg($("encDir"), () => { syncCharsetVisibility(); });
   encIn.oninput = () => { $("encInMeta").textContent = `${encIn.value.length.toLocaleString()} 字符`; };
   $("encClear").onclick = () => { encIn.value = ""; encOut.value = ""; encIn.oninput(); setChip($("encChip"), ""); };
   $("encPaste").onclick = async () => {
@@ -135,7 +161,7 @@
       let failed = 0;
       lines.forEach((line, i) => {
         if (!line.trim()) return;
-        const r = CD.runCodec(encAlgo.value, dir, line);
+        const r = CD.runCodec(encAlgo.value, dir, line, { charset: encCharset.value });
         if (r.ok) rows.push(`${i + 1}  ${r.data}`);
         else { rows.push(`${i + 1}  ✕ ${r.error}`); failed++; }
       });
@@ -145,7 +171,7 @@
         ` · ${Math.round(performance.now() - t0)} 毫秒`,
         failed ? "warn" : "ok");
     } else {
-      const r = CD.runCodec(encAlgo.value, dir, text);
+      const r = CD.runCodec(encAlgo.value, dir, text, { charset: encCharset.value });
       if (!r.ok) { setChip($("encChip"), "✕ " + r.error, "err"); status("执行失败：" + r.error); return; }
       encOut.value = r.data;
       setChip($("encChip"), `✓ ${dir === "encode" ? "编码" : "解码"}成功 · ${Math.round(performance.now() - t0)} 毫秒`, "ok");
@@ -636,6 +662,19 @@
   if (!CP.supportsCompression) {
     $("cpRun").disabled = true;
     setChip($("cpChip"), "当前浏览器不支持 CompressionStream", "err");
+  }
+  // 能力检测：Web Crypto 不可用时全局明示（老内核 / 特殊打开方式常见），
+  // 绝不静默失败——用户需要知道为什么加密点不动
+  if (!globalThis.crypto || !crypto.subtle) {
+    const warn = el("div", "banner err");
+    warn.style.margin = "0 0 12px";
+    warn.textContent =
+      "⚠ 当前浏览器环境不可用 Web Crypto：所有加密/解密与 SHA 系列哈希将失败" +
+      "（MD5 / BLAKE2 纯 JS 实现仍可用）。常见原因：浏览器内核过旧，或通过受限方式打开本地文件。" +
+      "请改用新版 Chrome / Edge / Firefox / Safari，或将本文件上传到 HTTPS 网页后通过网址访问。";
+    $("scrollArea").prepend(warn);
+    $("cryRun").disabled = true;
+    status("⚠ Web Crypto 不可用：加密功能已禁用");
   }
   status("就绪 · 完全离线运行 · 算法自检可通过左下角 ⚙ 运行");
   $("statusRight").textContent = `UTF-8 · 离线模式 · Web v${VERSION}`;

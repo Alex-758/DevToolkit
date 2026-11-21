@@ -2,7 +2,7 @@
 <html lang="zh-CN" data-theme="dark">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>DevToolkit Web · 离线编码解码工具箱</title>
 <style>/* DevToolkit Web 样式：与桌面版 GPT 风格一致（深色默认 + 浅色切换）。 */
 :root {
@@ -22,10 +22,21 @@ html[data-theme="light"] {
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
+/* 跨平台适配基础 */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
+  /* iOS Safari 地址栏收展导致 100vh 跳动：dvh 随动态视口变化 */
+  height: 100vh; height: 100dvh;
   background: var(--bg); color: var(--fg); font-size: 13px;
   font-family: -apple-system, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
   display: flex; overflow: hidden;
+  /* 刘海屏安全区（viewport-fit=cover 时生效） */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+button, .btn, .icon-btn, nav button, .seg button {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 /* ---- 侧边栏 ---- */
@@ -204,6 +215,27 @@ tr:hover td { background: var(--bg3); }
 .mt8 { margin-top: 8px; }
 .mt12 { margin-top: 12px; }
 .hint { color: var(--fg3); font-size: 11.5px; padding: 6px 2px; }
+
+/* ---- 触屏设备：增大点按目标；iOS 输入字号 <16px 聚焦会强制放大页面 ---- */
+@media (pointer: coarse) {
+  button.btn { padding: 9px 16px; font-size: 13px; }
+  .seg button { padding: 7px 16px; }
+  nav button { padding: 8px 12px; }
+  .icon-btn { width: 36px; height: 34px; }
+  select, input[type="text"], input[type="password"], input[type="number"] {
+    font-size: 16px;
+  }
+  textarea { font-size: 14px; }
+}
+
+/* ---- 横屏矮窗（手机横过来）：侧边栏导航改双列，压低高度 ---- */
+@media (max-height: 520px) and (orientation: landscape) {
+  nav { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+  nav button { white-space: nowrap; overflow: hidden; font-size: 12px; padding: 6px 8px; }
+  .side-title { display: none; }
+  .brand-ver { display: none; }
+  aside { padding: 6px 8px; }
+}
 </style>
 </head>
 <body>
@@ -1188,16 +1220,51 @@ function unB64(s) {
 function encodeText(text, charset) {
   const cs = (charset || "utf-8").toLowerCase();
   if (cs === "utf-8" || cs === "utf8") return utf8(text);
-  // 浏览器 TextEncoder 仅支持 UTF-8：GBK 等用 TextDecoder 反向验证后降级提示
-  throw new Error(`浏览器仅支持 UTF-8 字符集（当前选择 ${charset}）`);
+  if (cs === "utf-16le" || cs === "utf16le") {
+    // 浏览器无 UTF-16LE 编码器：手工逐码元输出（代理对天然正确）
+    const out = new Uint8Array(text.length * 2);
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      out[i * 2] = c & 0xff; out[i * 2 + 1] = (c >> 8) & 0xff;
+    }
+    return out;
+  }
+  if (cs === "latin-1" || cs === "latin1" || cs === "iso-8859-1") {
+    const out = new Uint8Array(text.length);
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      if (c > 0xff) throw new Error(`文本包含 Latin-1（单字节）范围外的字符（「${text[i]}」），浏览器端无法编码 GBK / Latin-1 之外的扩展字符集`);
+      out[i] = c;
+    }
+    return out;
+  }
+  // GBK / Big5 等多字节编码：浏览器只有解码器没有编码器（无码表），明确报错
+  throw new Error(`浏览器无法「编码」为 ${charset.toUpperCase()}（无编码码表，仅支持解码）。编码请改用 UTF-8 / UTF-16LE / Latin-1`);
 }
 function decodeText(bytes, charset) {
   const cs = (charset || "utf-8").toLowerCase();
   if (cs === "utf-8" || cs === "utf8") return fromUtf8(bytes);
+  if (cs === "utf-16le" || cs === "utf16le") {
+    // 原生 TextDecoder("utf-16le") 各内核支持不一，手工解码最稳
+    let s = "";
+    for (let i = 0; i + 1 < bytes.length; i += 2) {
+      s += String.fromCharCode(bytes[i] | (bytes[i + 1] << 8));
+    }
+    return s;
+  }
+  if (cs === "latin-1" || cs === "latin1" || cs === "iso-8859-1") {
+    let s = "";
+    for (const b of bytes) s += String.fromCharCode(b);
+    return s;
+  }
+  // GBK / Big5 等：浏览器（Chromium / WebKit / Gecko）原生解码器支持
   try {
-    return new TextDecoder(charset).decode(bytes);
-  } catch {
-    throw new Error(`不支持的字符集：${charset}`);
+    return new TextDecoder(charset, { fatal: true }).decode(bytes);
+  } catch (e) {
+    if (e.name === "RangeError" || e.name === "TypeError") {
+      throw new Error(`不支持的字符集：${charset}`);
+    }
+    throw new Error(`解码结果不是有效的 ${charset} 文本`);
   }
 }
 
@@ -2259,6 +2326,28 @@ globalThis.DT.selftest = async function () {
   t("qp 往返", CD.qpDecode(CD.qpEncode("中文 =x").data).data === "中文 =x");
   t("ascii 拒绝宽松数", !CD.asciiDecode("1_0").ok);
   t("b64 拒绝 4n+1", !CD.b64Decode("A").ok);
+  // 字符集（UTF-16LE / Latin-1 编码 + GBK 解码；跨平台对照 Python 权威值）
+  t("utf16le 编码", (() => {
+    const r = CD.b64Encode("A中", { charset: "utf-16le" });
+    // Python: base64.b64encode("A中".encode("utf-16-le")) == "QQAtTg=="
+    return r.ok && r.data === "QQAtTg==";
+  })());
+  t("utf16le 解码", CD.b64Decode("QQAtTg==", { charset: "utf-16le" }).data === "A中");
+  t("latin-1 编码", (() => {
+    const r = CD.b64Encode("éx", { charset: "latin-1" });
+    // Python: base64.b64encode("éx".encode("latin-1")) == "6Xg="
+    return r.ok && r.data === "6Xg=";
+  })());
+  t("gbk 解码", (() => {
+    // Python: base64.b64encode("中".encode("gbk")) == "1tA="
+    const r = CD.b64Decode("1tA=", { charset: "gbk" });
+    return r.ok && r.data === "中";
+  })());
+  t("gbk 编码被明确拒绝", (() => {
+    const r = CD.b64Encode("中", { charset: "gbk" });
+    return !r.ok && r.error.includes("无法「编码」");
+  })());
+  t("latin-1 超 0xFF 被拒", !CD.b64Encode("中", { charset: "latin-1" }).ok);
 
   // ---- 哈希（Python hashlib 权威值）----
   const V = {
@@ -2406,8 +2495,28 @@ globalThis.DT.selftest = async function () {
     o.value = id;
     encAlgo.appendChild(o);
   });
-  const HINTS = {
-    base64: "每 3 字节映射为 4 字符；标准字母表 A–Z a–z 0–9 + /，= 作为填充。",
+  // 字符集：仅字节型编解码器使用（与桌面版 params_schema 对齐）
+  const CHARSET_CODECS = new Set(["base64", "base64url", "base32", "hex", "base58", "base62", "qp"]);
+  const encCharset = el("select");
+  encCharset.id = "encCharset";
+  [["utf-8", "UTF-8（默认）"], ["utf-16le", "UTF-16LE"], ["gbk", "GBK（仅解码）"], ["latin-1", "Latin-1"]].forEach(([v, t]) => {
+    const o = el("option", null, t); o.value = v; encCharset.appendChild(o);
+  });
+  const charsetLabel = el("label", "field", "字符集");
+  charsetLabel.id = "encCharsetLabel";
+  const charsetWrap = el("span");
+  charsetWrap.style.cssText = "display:inline-flex;align-items:center;gap:6px;margin:0";
+  charsetWrap.appendChild(charsetLabel);
+  charsetWrap.appendChild(encCharset);
+  $("encHint").parentNode.insertBefore(charsetWrap, $("encHint"));
+  encCharset.style.width = "150px";
+  function syncCharsetVisibility() {
+    const use = CHARSET_CODECS.has(encAlgo.value);
+    charsetWrap.style.display = use ? "inline-flex" : "none";
+  }
+  syncCharsetVisibility();
+
+  const HINTS = {    base64: "每 3 字节映射为 4 字符；标准字母表 A–Z a–z 0–9 + /，= 作为填充。",
     base64url: "使用 - _ 替代 + / 并省略填充，可直接用于 URL 与 JWT。",
     base32: "RFC 4648：字母表 A–Z 2–7，= 填充，常用于 TOTP 与 DNS 记录。",
     hex: "支持大小写、有无空格分隔及 0x 前缀的输入。",
@@ -2420,10 +2529,16 @@ globalThis.DT.selftest = async function () {
     rot13: "仅作用于 A–Z a–z 26 个字母，其余字符保持不变；编码即解码。",
     qp: "RFC 2045 =XX 十六进制转义，常用于邮件 MIME 正文。",
   };
-  function syncEncHint() { $("encHint").textContent = HINTS[encAlgo.value] || ""; }
-  encAlgo.onchange = syncEncHint;
+  function syncEncHint() {
+    let h = HINTS[encAlgo.value] || "";
+    if (CHARSET_CODECS.has(encAlgo.value)) {
+      h += " 字符集：GBK / Big5 仅支持解码（浏览器无编码码表）；编码可用 UTF-8 / UTF-16LE / Latin-1。";
+    }
+    $("encHint").textContent = h;
+  }
+  encAlgo.onchange = () => { syncEncHint(); syncCharsetVisibility(); };
   syncEncHint();
-  let encDirection = bindSeg($("encDir"), () => {});
+  let encDirection = bindSeg($("encDir"), () => { syncCharsetVisibility(); });
   encIn.oninput = () => { $("encInMeta").textContent = `${encIn.value.length.toLocaleString()} 字符`; };
   $("encClear").onclick = () => { encIn.value = ""; encOut.value = ""; encIn.oninput(); setChip($("encChip"), ""); };
   $("encPaste").onclick = async () => {
@@ -2449,7 +2564,7 @@ globalThis.DT.selftest = async function () {
       let failed = 0;
       lines.forEach((line, i) => {
         if (!line.trim()) return;
-        const r = CD.runCodec(encAlgo.value, dir, line);
+        const r = CD.runCodec(encAlgo.value, dir, line, { charset: encCharset.value });
         if (r.ok) rows.push(`${i + 1}  ${r.data}`);
         else { rows.push(`${i + 1}  ✕ ${r.error}`); failed++; }
       });
@@ -2459,7 +2574,7 @@ globalThis.DT.selftest = async function () {
         ` · ${Math.round(performance.now() - t0)} 毫秒`,
         failed ? "warn" : "ok");
     } else {
-      const r = CD.runCodec(encAlgo.value, dir, text);
+      const r = CD.runCodec(encAlgo.value, dir, text, { charset: encCharset.value });
       if (!r.ok) { setChip($("encChip"), "✕ " + r.error, "err"); status("执行失败：" + r.error); return; }
       encOut.value = r.data;
       setChip($("encChip"), `✓ ${dir === "encode" ? "编码" : "解码"}成功 · ${Math.round(performance.now() - t0)} 毫秒`, "ok");
@@ -2950,6 +3065,19 @@ globalThis.DT.selftest = async function () {
   if (!CP.supportsCompression) {
     $("cpRun").disabled = true;
     setChip($("cpChip"), "当前浏览器不支持 CompressionStream", "err");
+  }
+  // 能力检测：Web Crypto 不可用时全局明示（老内核 / 特殊打开方式常见），
+  // 绝不静默失败——用户需要知道为什么加密点不动
+  if (!globalThis.crypto || !crypto.subtle) {
+    const warn = el("div", "banner err");
+    warn.style.margin = "0 0 12px";
+    warn.textContent =
+      "⚠ 当前浏览器环境不可用 Web Crypto：所有加密/解密与 SHA 系列哈希将失败" +
+      "（MD5 / BLAKE2 纯 JS 实现仍可用）。常见原因：浏览器内核过旧，或通过受限方式打开本地文件。" +
+      "请改用新版 Chrome / Edge / Firefox / Safari，或将本文件上传到 HTTPS 网页后通过网址访问。";
+    $("scrollArea").prepend(warn);
+    $("cryRun").disabled = true;
+    status("⚠ Web Crypto 不可用：加密功能已禁用");
   }
   status("就绪 · 完全离线运行 · 算法自检可通过左下角 ⚙ 运行");
   $("statusRight").textContent = `UTF-8 · 离线模式 · Web v${VERSION}`;
