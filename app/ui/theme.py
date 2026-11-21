@@ -83,7 +83,7 @@ QFrame[dtCard="true"] {{
 QLabel#dtTitle {{ font-size: 17px; font-weight: 600; }}
 QLabel#dtSub {{ color: {fg3}; font-size: 12px; }}
 QLabel#dtCardTitle {{ font-weight: 600; }}
-QLabel#dtMeta {{ color: {fg3}; font-size: 11px; }}
+QLabel#dtMeta {{ color: {fg2}; font-size: 12px; }}
 QLabel#dtHint {{ color: {fg3}; font-size: 11.5px; }}
 QScrollArea#dtPageScroll {{ background: transparent; border: none; }}
 QLabel#dtDrop {{
