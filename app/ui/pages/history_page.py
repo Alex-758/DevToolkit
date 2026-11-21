@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
+    QWidget,
 )
 
 from ...core import history
@@ -91,6 +92,19 @@ class HistoryPage(PageBase):
         self.tree.setColumnWidth(2, 190)
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._context_menu)
+        # 空状态占位：树为空时显示居中提示。用独立的隐藏容器做居中
+        # （容器与树互斥可见，顶层布局不用 stretch——stretch 会在树可见时
+        # 与 Expanding 的树争抢富余空间，把树压成最小高度）
+        self.empty_holder = QWidget()
+        ev = QVBoxLayout(self.empty_holder)
+        ev.addStretch(1)
+        self.empty_lbl = QLabel("暂无历史记录 —— 执行任意操作后会在这里留下一行摘要")
+        self.empty_lbl.setObjectName("dtHint")
+        self.empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ev.addWidget(self.empty_lbl)
+        ev.addStretch(1)
+        self.empty_holder.setVisible(False)
+        list_v.addWidget(self.empty_holder)
         list_v.addWidget(self.tree)
         root.addWidget(list_card, 1)
 
@@ -123,6 +137,8 @@ class HistoryPage(PageBase):
         self.safe_banner.setText(
             f"共 {len(entries)} 条记录，当前显示 {shown} 条 · 密钥、口令、明文与密文内容不会写入历史记录，仅保存操作类型、参数摘要与数据规模。"
         )
+        self.empty_holder.setVisible(shown == 0)
+        self.tree.setVisible(shown > 0)
 
     def _context_menu(self, pos):
         from PySide6.QtWidgets import QMenu

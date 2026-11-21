@@ -86,7 +86,9 @@ class HashPage(PageBase):
         self.hash_grid.setContentsMargins(12, 6, 12, 12)
         self._hash_rows = {}
         for i, (algo, name, note) in enumerate(hashing.HASH_ALGOS):
-            row, col = divmod(i, 2)
+            # 单列布局：56/64 字符的 SHA-224/256/384/512 摘要约需 470px 宽，
+            # 双列布局在默认窗口下值框只有 ~420px，摘要被无声截断（文字不完整）
+            row, col = i, 0
             lbl = QLabel(name)
             lbl.setObjectName("dtMeta")
             lbl.setFixedWidth(86)
@@ -105,7 +107,6 @@ class HashPage(PageBase):
             self.hash_grid.addWidget(copy_b, row, col * 3 + 2)
             self._hash_rows[algo] = (lbl, val)
         self.hash_grid.setColumnStretch(1, 1)
-        self.hash_grid.setColumnStretch(4, 1)
         hash_v.addWidget(grid_holder)
         root.addWidget(self.hash_card)
 
@@ -194,20 +195,27 @@ class HashPage(PageBase):
                 from ...core.batch import format_rows
                 for algo, (lbl, val) in self._hash_rows.items():
                     if algo == "sha256":
-                        val.setText(format_rows(r.data, with_index=True, with_errors=False) or "")
+                        shown = format_rows(r.data, with_index=True, with_errors=False) or ""
+                        val.setText(shown)
+                        val.setToolTip(shown)
                     else:
                         val.setText("（逐行模式下仅计算 SHA-256，其他算法见批量结果）")
+                        val.setToolTip("")
                 self.hash_header.set_meta(f"{r.meta['total']} 行 · SHA-256")
                 return
         r = hashing.text_hash_all(text)
         if not r.ok:
             for algo, (lbl, val) in self._hash_rows.items():
                 val.setText("")
+                val.setToolTip("")
             set_chip(self.hash_header.chip_lbl, f"✕ {r.error}", "err")
             return
         for algo, (lbl, val) in self._hash_rows.items():
             v = r.data[algo]
-            val.setText(v.upper() if self.upper_chk.isChecked() else v)
+            shown = v.upper() if self.upper_chk.isChecked() else v
+            val.setText(shown)
+            # 值框较窄时悬停可看完整摘要（R5 UI 审计：长摘要曾无声截断）
+            val.setToolTip(shown)
             val.setCursorPosition(0)
         ms = elapsed_ms(t0)
         n = len(text)
