@@ -324,7 +324,13 @@ class CryptoPage(PageBase):
         note_lbl = QLabel("Nonce / IV 每次加密自动随机生成；AEAD 认证 Tag 附加在密文尾部。")
         note_lbl.setObjectName("dtHint")
         note_lbl.setWordWrap(True)
-        grid.addWidget(note_lbl, 4, 0, 1, 4)
+        # 上下留呼吸空间。不能用 QSS padding：wordWrap 标签 + padding 会让
+        # Qt 的 heightForWidth/sizeHint 计算崩坏（实测整行被压到 11px、文字
+        # 直接消失），必须用布局容器 margins 提供间距
+        note_holder = QVBoxLayout()
+        note_holder.setContentsMargins(2, 6, 2, 8)
+        note_holder.addWidget(note_lbl)
+        grid.addLayout(note_holder, 4, 0, 1, 4)
         grid.setColumnStretch(9, 1)
 
         self.params_inner.addLayout(grid)
