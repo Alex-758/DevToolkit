@@ -85,6 +85,7 @@ QLabel#dtSub {{ color: {fg3}; font-size: 12px; }}
 QLabel#dtCardTitle {{ font-weight: 600; }}
 QLabel#dtMeta {{ color: {fg3}; font-size: 11px; }}
 QLabel#dtHint {{ color: {fg3}; font-size: 11.5px; }}
+QScrollArea#dtPageScroll {{ background: transparent; border: none; }}
 QLabel#dtDrop {{
     border: 1.5px dashed {border_strong};
     border-radius: 10px;

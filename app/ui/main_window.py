@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QStackedWidget,
     QStatusBar,
     QVBoxLayout,
@@ -139,7 +140,14 @@ class MainWindow(QMainWindow):
             page = page_cls()
             page.statusMsg.connect(self._set_status)
             page.historyAdd.connect(self._record_history)
-            self.stack.addWidget(page)
+            # 每页独立滚动容器：窗口小于页面最小尺寸时出现滚动条，而不是
+            # 让布局压缩到控件相互重叠（旧版在小窗口下加密/哈希页会挤烂）
+            scroll = QScrollArea()
+            scroll.setObjectName("dtPageScroll")
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.Shape.NoFrame)
+            scroll.setWidget(page)
+            self.stack.addWidget(scroll)
             self.pages[page_id] = page
 
         # ---- 状态栏 ----
