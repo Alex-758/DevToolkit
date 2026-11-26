@@ -40,11 +40,15 @@ globalThis.DT.smart = (({ ok, fail, utf8, fromUtf8 }) => {
     if (/&(#[0-9]{2,}|#[xX][0-9a-fA-F]{2,}|[a-zA-Z]{2,8});/.test(text)) trials.push(["HTML 实体解码", "html"]);
 
     for (const [action, codecId] of trials) {
+      if (["base64", "base64url", "base32", "hex"].includes(codecId)) {
+        const raw = CD.decodeBytes(codecId, compact);
+        if (raw.ok && raw.data.length) return { action, codecId, value: raw.data };
+        continue;
+      }
       const r = CD.runCodec(codecId, "decode", compact);
       if (!r.ok) continue;
       const decoded = r.data;
       if (decoded === text) continue;
-      // URL / Unicode / HTML 返回字符串；字节型返回的也是字符串（此处按文本处理）
       return { action, codecId, value: decoded };
     }
     return null;
@@ -81,10 +85,12 @@ globalThis.DT.smart = (({ ok, fail, utf8, fromUtf8 }) => {
         const trial = await tryStringDecoders(current);
         if (!trial) break;
         const before = current;
-        let decoded = trial.value;
-        // 若解码结果是可打印文本，先看是否藏着压缩数据
-        let bytes = null;
-        try { bytes = utf8(decoded); } catch {}
+        const decoded = trial.value;
+        // 字节型编码必须保留原始字节，否则 gzip/zip 等二进制会被错误转成逗号文本。
+        let bytes = decoded instanceof Uint8Array ? decoded : null;
+        if (!bytes) {
+          try { bytes = utf8(decoded); } catch {}
+        }
         if (bytes) {
           const comp = await tryDecompress(bytes, capMb);
           if (comp && comp.bomb) return fail(comp.error, "压缩炸弹防护终止：已保留原始输入");

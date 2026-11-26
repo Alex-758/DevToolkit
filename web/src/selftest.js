@@ -12,6 +12,7 @@ globalThis.DT.selftest = async function () {
   t("b64 解码", CD.b64Decode("YWJj").data === "abc");
   t("b64url 无填充", CD.b64Encode("a\u00ff", { urlsafe: true }).data.indexOf("=") === -1);
   t("b32 编码", CD.b32Encode("abc").data === "MFRGG===");
+  t("b32 拒绝非法填充", !CD.b32Decode("A======").ok && !CD.b32Decode("MY=====").ok);
   t("hex 编码", CD.hexEncode("abc").data === "616263");
   t("hex 解码 0x", CD.hexDecode("0x61 0x62").data === "ab");
   t("b58 往返", CD.b58Decode(CD.b58Encode("hello").data).data === "hello");
@@ -19,6 +20,7 @@ globalThis.DT.selftest = async function () {
   t("url 往返", CD.urlDecode(CD.urlEncode("a b/中").data).data === "a b/中");
   t("html 往返", CD.htmlDecode(CD.htmlEncode("<a>&中").data).data === "<a>&中");
   t("unicode 往返", CD.unicodeDecode(CD.unicodeEncode("中😀").data).data === "中😀");
+  t("unicode 拒绝孤立代理", !CD.unicodeDecode("\\uD83D").ok);
   t("ascii 往返", CD.asciiDecode(CD.asciiEncode("AB").data).data === "AB");
   t("rot13 对称", CD.rot13(CD.rot13("Hello").data).data === "Hello");
   t("qp 往返", CD.qpDecode(CD.qpEncode("中文 =x").data).data === "中文 =x");
@@ -31,6 +33,7 @@ globalThis.DT.selftest = async function () {
     return r.ok && r.data === "QQAtTg==";
   })());
   t("utf16le 解码", CD.b64Decode("QQAtTg==", { charset: "utf-16le" }).data === "A中");
+  t("utf16le 拒绝奇数字节", !CD.b64Decode("QQ==", { charset: "utf-16le" }).ok);
   t("latin-1 编码", (() => {
     const r = CD.b64Encode("éx", { charset: "latin-1" });
     // Python: base64.b64encode("éx".encode("latin-1")) == "6Xg="
@@ -64,6 +67,20 @@ globalThis.DT.selftest = async function () {
     t(`hash ${algo}`, r.ok && r.data === want, r.ok ? (r.data === want ? "" : r.data) : r.error);
   }
   t("hash 全部 10 种", (await H.textHashAll("abc")).ok);
+
+  // ---- 压缩 / 二进制智能解码 ----
+  if (globalThis.DT.compress.supportsCompression && globalThis.DT.compress.supportsDecompression) {
+    const source = new TextEncoder().encode("smart gzip 你好");
+    const gz = await globalThis.DT.compress.compressBytes(source, "gzip");
+    t("gzip 往返", gz.ok && (await globalThis.DT.compress.decompressBytes(gz.data, "gzip")).ok);
+    const b64 = C.b64encode(gz.data);
+    const smart = await globalThis.DT.smart(b64, 5, 64);
+    t("Base64→GZIP 智能解码", smart.ok && smart.data.finalText === "smart gzip 你好");
+    const zlib = await globalThis.DT.compress.compressBytes(source, "zlib");
+    const broken = new Uint8Array(zlib.data);
+    broken[broken.length - 1] ^= 1;
+    t("ZLIB 校验和损坏被拒", !(await globalThis.DT.compress.decompressBytes(broken, "zlib")).ok);
+  }
 
   // ---- 加密 ----
   const DATA = new TextEncoder().encode("roundtrip 你好 😀");

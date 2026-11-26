@@ -295,7 +295,13 @@ def decompress(data: bytes, fmt: Optional[str] = None, cap_mb: int = DEFAULT_CAP
         return Result.failure("输入为空：请提供待解压数据")
     if len(data) > MAX_INPUT_BYTES:
         return Result.failure(f"输入过大（超过 256 MB 上限）")
-    cap = int(cap_mb) * 1024 * 1024
+    try:
+        cap_value = int(cap_mb)
+    except (TypeError, ValueError, OverflowError):
+        return Result.failure("解压输出上限必须是有效的整数 MB")
+    if cap_value < 1:
+        return Result.failure("解压输出上限必须大于 0 MB")
+    cap = cap_value * 1024 * 1024
     if fmt is None:
         fmt = sniff(data)
         if fmt is None:
@@ -330,7 +336,7 @@ def decompress(data: bytes, fmt: Optional[str] = None, cap_mb: int = DEFAULT_CAP
         # error_detail 作为可编程标记：调用方（智能解码 / 自动识别）可区分
         # 「超限终止」与「格式无效」，把真实原因透传给用户（R5 B7/B13）
         return Result.failure(
-            f"解压结果超过 {cap_mb} MB 上限，已终止（压缩炸弹防护）。"
+            f"解压结果超过 {cap_value} MB 上限，已终止（压缩炸弹防护）。"
             "如确需处理更大文件，请在设置中调高上限",
             "cap_exceeded",
         )
@@ -369,10 +375,16 @@ def try_auto_decompress(data: bytes, cap_mb: int = DEFAULT_CAP_MB) -> Result:
     R5 修复（B7）：三种 wbits 都因超限终止时，如实报告「压缩炸弹防护」，
     旧实现把炸弹信号吞掉，报成「不是有效的数据」误导排查。
     """
+    try:
+        cap_value = int(cap_mb)
+    except (TypeError, ValueError, OverflowError):
+        return Result.failure("解压输出上限必须是有效的整数 MB")
+    if cap_value < 1:
+        return Result.failure("解压输出上限必须大于 0 MB")
     cap_exceeded = False
     for fmt, wbits in (("gzip", 31), ("zlib", 15), ("deflate", -15)):
         try:
-            out = _guarded_zlib(data, wbits, int(cap_mb) * 1024 * 1024)
+            out = _guarded_zlib(data, wbits, cap_value * 1024 * 1024)
             return Result.success(out, fmt=fmt, in_bytes=len(data), out_bytes=len(out))
         except _CapExceeded:
             cap_exceeded = True
@@ -380,7 +392,7 @@ def try_auto_decompress(data: bytes, cap_mb: int = DEFAULT_CAP_MB) -> Result:
             continue
     if cap_exceeded:
         return Result.failure(
-            f"解压结果超过 {int(cap_mb)} MB 上限，已终止（压缩炸弹防护）。"
+            f"解压结果超过 {cap_value} MB 上限，已终止（压缩炸弹防护）。"
             "如确需处理更大文件，请在设置中调高上限",
             "cap_exceeded",
         )

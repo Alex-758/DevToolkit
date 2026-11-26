@@ -61,6 +61,14 @@ def test_compare():
     # 含空格的粘贴值
     r = hashing.compare("ab cd 12", "ABCD12")
     assert r.ok and r.data is True
+    assert hashing.compare("ab\tcd\n12", "ABCD12").data is True
+
+
+def test_smart_invalid_layer_count_returns_failure():
+    from app.core import smart_decode
+    for value in ("bad", None, float("inf")):
+        r = smart_decode.smart_decode("SGVsbG8=", value)
+        assert not r.ok and "层数" in r.error
 
 
 def test_unknown_algo():

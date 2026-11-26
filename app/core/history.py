@@ -92,7 +92,7 @@ def remove_entry(index: int) -> bool:
 
 
 def clear_entries() -> bool:
-    with _lock:
+    with _lock, cross_process_lock(get_history_path()):
         return _save_list(get_history_path(), [])
 
 
@@ -124,13 +124,17 @@ def remove_favorite(kind: str, target: str) -> bool:
 
 def toggle_favorite(kind: str, target: str) -> bool:
     """切换收藏状态，返回切换后是否已收藏。"""
-    favs = list_favorites()
-    exists = any(f.get("kind") == kind and f.get("target") == target for f in favs)
-    if exists:
-        remove_favorite(kind, target)
-        return False
-    add_favorite(kind, target)
-    return True
+    path = get_favorites_path()
+    with _lock, cross_process_lock(path):
+        favs = _load_list(path)
+        exists = any(f.get("kind") == kind and f.get("target") == target for f in favs)
+        if exists:
+            favs = [f for f in favs if not (f.get("kind") == kind and f.get("target") == target)]
+            desired = False
+        else:
+            favs.append({"kind": kind, "target": target, "ts": time.strftime("%Y-%m-%d %H:%M:%S", _now_str_struct())})
+            desired = True
+        return desired if _save_list(path, favs) else exists
 
 
 def is_favorite(kind: str, target: str) -> bool:

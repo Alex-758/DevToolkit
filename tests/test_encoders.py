@@ -170,6 +170,14 @@ def test_qp_roundtrip_and_multiline():
     assert dec.ok and dec.data == text
 
 
+def test_html_and_qp_preserve_boundary_whitespace():
+    text = "  lead and trail  "
+    for codec_id in ("html", "qp"):
+        enc = encoders.encode(codec_id, text)
+        dec = encoders.decode(codec_id, enc.data)
+        assert enc.ok and dec.ok and dec.data == text
+
+
 def test_charset_gbk():
     enc = encoders.encode("hex", "中文", {"charset": "gbk"})
     # 中文 in GBK = D6D0 CEC4

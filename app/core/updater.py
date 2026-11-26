@@ -19,6 +19,7 @@ from .results import Result
 RELEASES_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 RELEASES_PAGE_URL = f"https://github.com/{GITHUB_REPO}/releases"
 TIMEOUT_S = 6
+MAX_RESPONSE_BYTES = 1024 * 1024
 
 
 def fetch_latest_release(timeout: int = TIMEOUT_S) -> Result:
@@ -32,7 +33,10 @@ def fetch_latest_release(timeout: int = TIMEOUT_S) -> Result:
     )
     try:
         with urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+            raw = resp.read(MAX_RESPONSE_BYTES + 1)
+            if len(raw) > MAX_RESPONSE_BYTES:
+                return Result.failure("GitHub 响应过大，已拒绝处理")
+            data = json.loads(raw.decode("utf-8"))
     except HTTPError as exc:
         if exc.code == 404:
             return Result.failure("仓库还没有发布任何 Release（发布后即可正常检查）")
@@ -41,6 +45,8 @@ def fetch_latest_release(timeout: int = TIMEOUT_S) -> Result:
         return Result.failure("网络不可用或查询超时，请稍后再试")
     except ValueError as exc:
         return Result.failure("GitHub 响应不是有效数据", repr(exc))
+    if not isinstance(data, dict):
+        return Result.failure("GitHub 响应格式不符合预期")
     tag = str(data.get("tag_name") or "")
     url = str(data.get("html_url") or "")
     if not tag:
@@ -53,7 +59,13 @@ def _is_github_url(url: str) -> bool:
         parts = urlparse(url)
     except ValueError:
         return False
-    return parts.scheme == "https" and parts.hostname in ("github.com", "www.github.com")
+    expected_path = f"/{GITHUB_REPO}/releases"
+    return (
+        parts.scheme == "https"
+        and parts.hostname in ("github.com", "www.github.com")
+        and (parts.path == expected_path or parts.path.startswith(expected_path + "/"))
+        and not parts.params and not parts.query and not parts.fragment
+    )
 
 
 def _version_tuple(version: str):

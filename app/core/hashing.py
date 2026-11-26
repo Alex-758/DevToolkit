@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
@@ -127,8 +128,8 @@ def file_hash(
 
 def compare(a: str, b: str) -> Result:
     """比较两个哈希值（忽略大小写与空白）。"""
-    a_clean = (a or "").strip().lower().replace(" ", "")
-    b_clean = (b or "").strip().lower().replace(" ", "")
+    a_clean = re.sub(r"\s+", "", (a or "").lower())
+    b_clean = re.sub(r"\s+", "", (b or "").lower())
     if not a_clean or not b_clean:
         return Result.failure("请输入两个哈希值进行比较")
     same = a_clean == b_clean

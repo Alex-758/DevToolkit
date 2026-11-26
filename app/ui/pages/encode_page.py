@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from ...core import batch as batch_mod
-from ...core import detect, encoders
+from ...core import config, detect, encoders
 from .. import icons
 from ..context import CTX
 from ..widgets import (
@@ -349,7 +349,8 @@ class EncodePage(PageBase):
         is_batch = self.batch_chk.isChecked()
         if is_batch:
             result = batch_mod.process_lines(
-                text, lambda ln: encoders.run(codec.id, direction, ln, params)
+                text, lambda ln: encoders.run(codec.id, direction, ln, params),
+                skip_empty=bool(config.get_setting("batch_skip_empty")),
             )
             if result.ok:
                 from ...core.batch import format_rows

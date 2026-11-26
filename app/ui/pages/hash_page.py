@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ...core import hashing
+from ...core import config, hashing
 from ..widgets import (
     WorkerRunner,
     CardHeader,
@@ -190,7 +190,10 @@ class HashPage(PageBase):
         text = self.in_edit.toPlainText()
         if self.batch_chk.isChecked():
             from ...core import batch as batch_mod
-            r = batch_mod.batch_hash(text, "sha256")
+            r = batch_mod.process_lines(
+                text, lambda ln: hashing.text_hash(ln, "sha256"),
+                skip_empty=bool(config.get_setting("batch_skip_empty")),
+            )
             if r.ok:
                 from ...core.batch import format_rows
                 for algo, (lbl, val) in self._hash_rows.items():

@@ -67,6 +67,13 @@ function b32Decode(text, { charset = "utf-8" } = {}) {
   if (!c) return ok("");
   if (!/^[A-Z2-7]+={0,6}$/.test(c)) return fail("输入包含非 Base32 字符。字母表为 A–Z 2–7，= 作为填充");
   const body = c.replace(/=+$/, "");
+  const padLength = c.length - body.length;
+  const remainder = body.length % 8;
+  const validRemainders = new Set([0, 2, 4, 5, 7]);
+  const expectedPadding = ({ 0: 0, 2: 6, 4: 4, 5: 3, 7: 1 })[remainder];
+  if (!validRemainders.has(remainder) || (padLength && (c.length % 8 !== 0 || padLength !== expectedPadding))) {
+    return fail("Base32 长度或填充不合法");
+  }
   let bits = 0, value = 0;
   const out = [];
   for (const ch of body) {
@@ -75,6 +82,7 @@ function b32Decode(text, { charset = "utf-8" } = {}) {
     value = (value << 5) | idx; bits += 5;
     if (bits >= 8) { out.push((value >>> (bits - 8)) & 0xff); bits -= 8; }
   }
+  if (bits > 0 && (value & ((1 << bits) - 1)) !== 0) return fail("Base32 尾部填充位必须为零");
   const bytes = new Uint8Array(out);
   try { return ok(decodeText(bytes, charset), { in_bytes: c.length, out_bytes: bytes.length }); }
   catch { return fail(`解码结果不是有效的 ${charset} 文本`); }
@@ -200,7 +208,7 @@ function htmlEncode(text, { entity = "hex", namedOnly = false } = {}) {
 }
 function htmlDecode(text) {
   const g = guard(text); if (g) return g;
-  const s = text.trim();
+  const s = text;
   if (!s) return ok("");
   let out;
   if (typeof document !== "undefined") {
@@ -250,6 +258,9 @@ function unicodeDecode(text) {
   if (bad) return fail("Unicode 解码失败：存在无效的 \\u 序列（\\u 后必须跟 4 位十六进制）");
   try {
     const out = text.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+    if (/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(out)) {
+      return fail("Unicode 解码失败：存在未配对的 UTF-16 代理项");
+    }
     return ok(out, { in_bytes: text.length, out_chars: out.length });
   } catch { return fail("Unicode 解码失败"); }
 }
@@ -324,7 +335,7 @@ function qpDecode(text, { charset = "utf-8" } = {}) {
   const g = guard(text); if (g) return g;
   if (!text.trim()) return ok("");
   if (/[^\x00-\x7F]/.test(text)) return fail("QP 解码失败：输入包含非 ASCII 字符");
-  const cleaned = text.replace(/=\r?\n/g, "").replace(/[ \t]+$/gm, "");
+  const cleaned = text.replace(/=\r?\n/g, "");
   const out = [];
   for (let i = 0; i < cleaned.length; i++) {
     const ch = cleaned[i];
@@ -353,6 +364,29 @@ function unB64(s) {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
+}
+function decodeBytes(codecId, text) {
+  const compact = stripWs(text);
+  try {
+    if (codecId === "base64" || codecId === "base64url") {
+      if (!compact) return ok(new Uint8Array());
+      const urlsafe = codecId === "base64url";
+      const allowed = urlsafe ? /^[A-Za-z0-9\-_]+={0,2}$/ : /^[A-Za-z0-9+/]+={0,2}$/;
+      if (!allowed.test(compact) || compact.replace(/=/g, "").length % 4 === 1) return fail("Base64 长度或字符不合法");
+      let s = compact.replace(/-/g, "+").replace(/_/g, "/");
+      while (s.length % 4) s += "=";
+      return ok(unB64(s));
+    }
+    if (codecId === "hex") return ok(unhex(compact.replace(/0x/gi, "")));
+    if (codecId === "base32") {
+      const r = b32Decode(compact, { charset: "latin-1" });
+      if (!r.ok) return r;
+      const out = new Uint8Array(r.data.length);
+      for (let i = 0; i < r.data.length; i++) out[i] = r.data.charCodeAt(i);
+      return ok(out);
+    }
+    return fail(`不支持字节级解码：${codecId}`);
+  } catch (e) { return fail(e.message || "字节解码失败"); }
 }
 function encodeText(text, charset) {
   const cs = (charset || "utf-8").toLowerCase();
@@ -383,9 +417,13 @@ function decodeText(bytes, charset) {
   if (cs === "utf-8" || cs === "utf8") return fromUtf8(bytes);
   if (cs === "utf-16le" || cs === "utf16le") {
     // 原生 TextDecoder("utf-16le") 各内核支持不一，手工解码最稳
+    if (bytes.length % 2) throw new Error("UTF-16LE 字节长度必须为偶数");
     let s = "";
-    for (let i = 0; i + 1 < bytes.length; i += 2) {
+    for (let i = 0; i < bytes.length; i += 2) {
       s += String.fromCharCode(bytes[i] | (bytes[i + 1] << 8));
+    }
+    if (/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(s)) {
+      throw new Error("UTF-16LE 包含未配对的代理项");
     }
     return s;
   }
@@ -427,5 +465,5 @@ function runCodec(id, direction, text, params = {}) {
   catch (e) { return fail(`处理失败：${e.message}`); }
 }
 
-return { CODECS, CODEC_ORDER, runCodec, b64Encode, b64Decode, b32Encode, b32Decode, hexEncode, hexDecode, b58Encode, b58Decode, b62Encode, b62Decode, urlEncode, urlDecode, htmlEncode, htmlDecode, unicodeEncode, unicodeDecode, asciiEncode, asciiDecode, rot13, qpEncode, qpDecode, MAX_INPUT_CHARS, B58_B62_MAX_CHARS };
+return { CODECS, CODEC_ORDER, runCodec, decodeBytes, b64Encode, b64Decode, b32Encode, b32Decode, hexEncode, hexDecode, b58Encode, b58Decode, b62Encode, b62Decode, urlEncode, urlDecode, htmlEncode, htmlDecode, unicodeEncode, unicodeDecode, asciiEncode, asciiDecode, rot13, qpEncode, qpDecode, MAX_INPUT_CHARS, B58_B62_MAX_CHARS };
 })(globalThis.DT.core);

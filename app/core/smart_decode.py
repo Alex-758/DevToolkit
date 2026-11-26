@@ -142,7 +142,11 @@ def smart_decode(text: str, max_layers: int = DEFAULT_LAYERS, cap_mb: int = 512)
         return Result.failure("请先输入待解码内容")
     if len(text) > MAX_INPUT_CHARS:
         return Result.failure("输入过大（超过 4 MB），智能解码请使用文件处理页")
-    max_layers = max(1, min(int(max_layers), MAX_LAYERS))
+    try:
+        max_layers = int(max_layers)
+    except (TypeError, ValueError, OverflowError):
+        return Result.failure("最大解码层数必须是有效的整数")
+    max_layers = max(1, min(max_layers, MAX_LAYERS))
 
     steps: List[Step] = []
     seen = set()

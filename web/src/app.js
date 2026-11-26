@@ -633,7 +633,7 @@
   };
 
   /* ================= 关于 / 自检 ================= */
-  const VERSION = "1.0";
+  const VERSION = "1.2.1";
   $("aboutVer").textContent = "v" + VERSION + " · 单文件离线版";
   $("verLabel").textContent = "Web v" + VERSION;
   async function runSelfTest(chipNode, detailNode) {
@@ -645,7 +645,7 @@
     setChip(chipNode, r.failed === 0 ? `✓ 自检通过 ${r.passed}/${r.passed} · ${ms} 毫秒` : `✕ ${r.failed} 项失败`, r.failed === 0 ? "ok" : "err");
     if (detailNode) {
       detailNode.textContent = r.failed === 0
-        ? `全部 ${r.passed} 项算法校验通过（编码 16 项 · 哈希 9 项 · 加密 8 项）`
+        ? `全部 ${r.passed} 项算法校验通过（编码 25 项 · 哈希 10 项 · 压缩/智能解码 3 项 · 加密 9 项）`
         : r.items.filter((i) => !i.pass).map((i) => `${i.name}: ${i.extra}`).join("；");
     }
     return r;

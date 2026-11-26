@@ -37,8 +37,10 @@
 
 ```bash
 python web/build.py
-# 产物：web/dist/DevToolkit.html（约 130 KB）
+# 产物：web/dist/DevToolkit.html（约 143 KB）
 ```
+
+在线访问：[DevToolkit Web](https://alex-758.github.io/DevToolkit/DevToolkit.html)
 
 构建脚本会校验：占位符已替换、**无任何外部引用**（`http(s)://`、`@import`）——确保完全离线。
 
@@ -60,11 +62,12 @@ python web/build.py
 
 ## 验证
 
-页面内置「自检」按钮（左下角 ⚙ 或「关于软件」页），运行 35 项算法校验：
+页面内置「自检」按钮（左下角 ⚙ 或「关于软件」页），当前运行 47 项算法校验：
 
-- 编码 16 项（含拒绝非法输入）
-- 哈希 9 项（对照 Python hashlib 权威值）
-- 加密 10 项（往返、错误口令、篡改检测、空明文、ECB 拒绝、ChaCha）
+- 编码与字符集 25 项（含拒绝非法输入）
+- 哈希 10 项（对照 Python hashlib 权威值）
+- 压缩与智能解码 3 项（GZIP 往返、Base64→GZIP、ZLIB 校验和）
+- 加密 9 项（往返、错误口令、篡改检测、空明文、ECB 拒绝、ChaCha）
 
 开发期另用 Node 与真实 Edge（CDP 驱动）做端到端验证：UI 初始化、自检全过、编码/哈希/
 加密/压缩的 UI 往返、主题切换、控制台零报错。

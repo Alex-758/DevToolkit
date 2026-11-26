@@ -412,16 +412,16 @@ def _b58_encode(text: str, params: dict) -> Result:
     guard = _check_input(text)
     if guard:
         return guard
-    if len(text) > B58_B62_MAX_CHARS:
-        return Result.failure(
-            f"输入过大（{len(text):,} 字符）：Base58 编码耗时随长度平方增长，上限 {B58_B62_MAX_CHARS:,} 字符。"
-            "长内容请改用 Base64 / Hex"
-        )
     charset = params.get("charset", "utf-8")
     try:
         raw = _to_bytes(text, charset)
     except ValueError as exc:
         return Result.failure(str(exc))
+    if len(raw) > B58_B62_MAX_CHARS:
+        return Result.failure(
+            f"输入过大（{len(raw):,} 字节）：Base58 编码耗时随长度平方增长，上限 {B58_B62_MAX_CHARS:,} 字节。"
+            "长内容请改用 Base64 / Hex"
+        )
     num = int.from_bytes(raw, "big") if raw else 0
     out = ""
     while num > 0:
@@ -474,16 +474,16 @@ def _b62_encode(text: str, params: dict) -> Result:
     guard = _check_input(text)
     if guard:
         return guard
-    if len(text) > B58_B62_MAX_CHARS:
-        return Result.failure(
-            f"输入过大（{len(text):,} 字符）：Base62 编码耗时随长度平方增长，上限 {B58_B62_MAX_CHARS:,} 字符。"
-            "长内容请改用 Base64 / Hex"
-        )
     charset = params.get("charset", "utf-8")
     try:
         raw = _to_bytes(text, charset)
     except ValueError as exc:
         return Result.failure(str(exc))
+    if len(raw) > B58_B62_MAX_CHARS:
+        return Result.failure(
+            f"输入过大（{len(raw):,} 字节）：Base62 编码耗时随长度平方增长，上限 {B58_B62_MAX_CHARS:,} 字节。"
+            "长内容请改用 Base64 / Hex"
+        )
     index = {ch: i for i, ch in enumerate(_B62_ALPHABET)}
     num = int.from_bytes(raw, "big") if raw else 0
     out = ""
@@ -600,7 +600,7 @@ def _html_decode(text: str, params: dict) -> Result:
     guard = _check_input(text)
     if guard:
         return guard
-    s = text.strip()
+    s = text
     if not s:
         return Result.success("", in_bytes=0, out_bytes=0)
     decoded = _html.unescape(s)
@@ -822,7 +822,7 @@ def _qp_decode(text: str, params: dict) -> Result:
     guard = _check_input(text)
     if guard:
         return guard
-    s = text.strip()
+    s = text
     if not s:
         return Result.success("", in_bytes=0, out_bytes=0)
     charset = params.get("charset", "utf-8")

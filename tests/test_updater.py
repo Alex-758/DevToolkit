@@ -64,6 +64,12 @@ def test_check_update_non_github_url_replaced():
     r = updater.check_update("1.0.0", _fake_fetch("v2.0.0", url="https://evil.example.com/x"))
     assert r.ok and r.data["has_update"]
     assert r.data["url"] == updater.RELEASES_PAGE_URL
+    for url in (
+        "https://github.com/other/repo/releases/tag/v2.0.0",
+        "https://github.com/Alex-758/DevToolkit/releases?next=evil.example",
+    ):
+        r = updater.check_update("1.0.0", _fake_fetch("v2.0.0", url=url))
+        assert r.data["url"] == updater.RELEASES_PAGE_URL
 
 
 # --- fetch_latest_release（mock urlopen，不发真实请求）---
@@ -78,8 +84,9 @@ class _FakeResp:
     def __exit__(self, *args):
         return False
 
-    def read(self):
-        return self._payload.encode("utf-8")
+    def read(self, size=-1):
+        raw = self._payload.encode("utf-8")
+        return raw if size < 0 else raw[:size]
 
 
 def test_fetch_latest_release_parses_json():
@@ -119,6 +126,27 @@ def test_fetch_latest_release_bad_json():
     with patch.object(updater, "urlopen", lambda req, timeout: _FakeResp("not-json{")):
         r = updater.fetch_latest_release()
     assert not r.ok
+
+
+def test_fetch_latest_release_response_size_limit():
+    class LargeResp(_FakeResp):
+        def read(self, size=-1):
+            return ("{" + "x" * (updater.MAX_RESPONSE_BYTES + 10)).encode("utf-8")
+    with patch.object(updater, "urlopen", lambda req, timeout: LargeResp("{}")):
+        r = updater.fetch_latest_release()
+    assert not r.ok and "过大" in r.error
+
+
+def test_fetch_latest_release_unexpected_json_shape():
+    with patch.object(updater, "urlopen", lambda req, timeout: _FakeResp("[]")):
+        r = updater.fetch_latest_release()
+    assert not r.ok and "格式" in r.error
+
+
+def test_fetch_latest_release_null_json_shape():
+    with patch.object(updater, "urlopen", lambda req, timeout: _FakeResp("null")):
+        r = updater.fetch_latest_release()
+    assert not r.ok and "格式" in r.error
 
 
 def test_fetch_latest_release_missing_tag():

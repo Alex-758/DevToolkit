@@ -104,6 +104,12 @@ def test_unknown_format():
     assert not cp.decompress(b"x", "rar5").ok
 
 
+def test_invalid_cap_returns_result_failure():
+    for cap in ("bad", None, float("inf"), float("nan"), 0):
+        r = cp.decompress(b"x", "gzip", cap)
+        assert not r.ok and "上限" in r.error
+
+
 def test_try_auto_decompress():
     data = zlib.compress(b"fallback zlib")
     r = cp.try_auto_decompress(data)

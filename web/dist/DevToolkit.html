@@ -245,7 +245,7 @@ tr:hover td { background: var(--bg3); }
     <div class="logo">DT</div>
     <div>
       <div class="brand-name">DevToolkit</div>
-      <div class="brand-ver" id="verLabel">Web v1.0</div>
+      <div class="brand-ver" id="verLabel">Web v1.2.1</div>
     </div>
   </div>
   <div class="side-title">功能导航</div>
@@ -930,6 +930,13 @@ function b32Decode(text, { charset = "utf-8" } = {}) {
   if (!c) return ok("");
   if (!/^[A-Z2-7]+={0,6}$/.test(c)) return fail("输入包含非 Base32 字符。字母表为 A–Z 2–7，= 作为填充");
   const body = c.replace(/=+$/, "");
+  const padLength = c.length - body.length;
+  const remainder = body.length % 8;
+  const validRemainders = new Set([0, 2, 4, 5, 7]);
+  const expectedPadding = ({ 0: 0, 2: 6, 4: 4, 5: 3, 7: 1 })[remainder];
+  if (!validRemainders.has(remainder) || (padLength && (c.length % 8 !== 0 || padLength !== expectedPadding))) {
+    return fail("Base32 长度或填充不合法");
+  }
   let bits = 0, value = 0;
   const out = [];
   for (const ch of body) {
@@ -938,6 +945,7 @@ function b32Decode(text, { charset = "utf-8" } = {}) {
     value = (value << 5) | idx; bits += 5;
     if (bits >= 8) { out.push((value >>> (bits - 8)) & 0xff); bits -= 8; }
   }
+  if (bits > 0 && (value & ((1 << bits) - 1)) !== 0) return fail("Base32 尾部填充位必须为零");
   const bytes = new Uint8Array(out);
   try { return ok(decodeText(bytes, charset), { in_bytes: c.length, out_bytes: bytes.length }); }
   catch { return fail(`解码结果不是有效的 ${charset} 文本`); }
@@ -1063,7 +1071,7 @@ function htmlEncode(text, { entity = "hex", namedOnly = false } = {}) {
 }
 function htmlDecode(text) {
   const g = guard(text); if (g) return g;
-  const s = text.trim();
+  const s = text;
   if (!s) return ok("");
   let out;
   if (typeof document !== "undefined") {
@@ -1113,6 +1121,9 @@ function unicodeDecode(text) {
   if (bad) return fail("Unicode 解码失败：存在无效的 \\u 序列（\\u 后必须跟 4 位十六进制）");
   try {
     const out = text.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+    if (/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(out)) {
+      return fail("Unicode 解码失败：存在未配对的 UTF-16 代理项");
+    }
     return ok(out, { in_bytes: text.length, out_chars: out.length });
   } catch { return fail("Unicode 解码失败"); }
 }
@@ -1187,7 +1198,7 @@ function qpDecode(text, { charset = "utf-8" } = {}) {
   const g = guard(text); if (g) return g;
   if (!text.trim()) return ok("");
   if (/[^\x00-\x7F]/.test(text)) return fail("QP 解码失败：输入包含非 ASCII 字符");
-  const cleaned = text.replace(/=\r?\n/g, "").replace(/[ \t]+$/gm, "");
+  const cleaned = text.replace(/=\r?\n/g, "");
   const out = [];
   for (let i = 0; i < cleaned.length; i++) {
     const ch = cleaned[i];
@@ -1216,6 +1227,29 @@ function unB64(s) {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
+}
+function decodeBytes(codecId, text) {
+  const compact = stripWs(text);
+  try {
+    if (codecId === "base64" || codecId === "base64url") {
+      if (!compact) return ok(new Uint8Array());
+      const urlsafe = codecId === "base64url";
+      const allowed = urlsafe ? /^[A-Za-z0-9\-_]+={0,2}$/ : /^[A-Za-z0-9+/]+={0,2}$/;
+      if (!allowed.test(compact) || compact.replace(/=/g, "").length % 4 === 1) return fail("Base64 长度或字符不合法");
+      let s = compact.replace(/-/g, "+").replace(/_/g, "/");
+      while (s.length % 4) s += "=";
+      return ok(unB64(s));
+    }
+    if (codecId === "hex") return ok(unhex(compact.replace(/0x/gi, "")));
+    if (codecId === "base32") {
+      const r = b32Decode(compact, { charset: "latin-1" });
+      if (!r.ok) return r;
+      const out = new Uint8Array(r.data.length);
+      for (let i = 0; i < r.data.length; i++) out[i] = r.data.charCodeAt(i);
+      return ok(out);
+    }
+    return fail(`不支持字节级解码：${codecId}`);
+  } catch (e) { return fail(e.message || "字节解码失败"); }
 }
 function encodeText(text, charset) {
   const cs = (charset || "utf-8").toLowerCase();
@@ -1246,9 +1280,13 @@ function decodeText(bytes, charset) {
   if (cs === "utf-8" || cs === "utf8") return fromUtf8(bytes);
   if (cs === "utf-16le" || cs === "utf16le") {
     // 原生 TextDecoder("utf-16le") 各内核支持不一，手工解码最稳
+    if (bytes.length % 2) throw new Error("UTF-16LE 字节长度必须为偶数");
     let s = "";
-    for (let i = 0; i + 1 < bytes.length; i += 2) {
+    for (let i = 0; i < bytes.length; i += 2) {
       s += String.fromCharCode(bytes[i] | (bytes[i + 1] << 8));
+    }
+    if (/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(s)) {
+      throw new Error("UTF-16LE 包含未配对的代理项");
     }
     return s;
   }
@@ -1290,7 +1328,7 @@ function runCodec(id, direction, text, params = {}) {
   catch (e) { return fail(`处理失败：${e.message}`); }
 }
 
-return { CODECS, CODEC_ORDER, runCodec, b64Encode, b64Decode, b32Encode, b32Decode, hexEncode, hexDecode, b58Encode, b58Decode, b62Encode, b62Decode, urlEncode, urlDecode, htmlEncode, htmlDecode, unicodeEncode, unicodeDecode, asciiEncode, asciiDecode, rot13, qpEncode, qpDecode, MAX_INPUT_CHARS, B58_B62_MAX_CHARS };
+return { CODECS, CODEC_ORDER, runCodec, decodeBytes, b64Encode, b64Decode, b32Encode, b32Decode, hexEncode, hexDecode, b58Encode, b58Decode, b62Encode, b62Decode, urlEncode, urlDecode, htmlEncode, htmlDecode, unicodeEncode, unicodeDecode, asciiEncode, asciiDecode, rot13, qpEncode, qpDecode, MAX_INPUT_CHARS, B58_B62_MAX_CHARS };
 })(globalThis.DT.core);
 
 </script>
@@ -2027,9 +2065,29 @@ globalThis.DT.compress = (({ ok, fail, concat }) => {
   const FORMAT_NAMES = { gzip: "GZIP", zlib: "ZLIB", deflate: "DEFLATE（裸流）", zip: "ZIP", brotli: "Brotli", zstd: "Zstandard", lz4: "LZ4" };
   const UNSUPPORTED = { zip: "ZIP", brotli: "Brotli", zstd: "Zstandard", lz4: "LZ4" };
 
-  async function streamThrough(bytes, stream) {
+  async function streamThrough(bytes, stream, cap = Infinity) {
     const out = new Blob([bytes]).stream().pipeThrough(stream);
-    return new Uint8Array(await new Response(out).arrayBuffer());
+    const reader = out.getReader();
+    const chunks = [];
+    let total = 0;
+    try {
+      while (true) {
+        const part = await reader.read();
+        if (part.done) break;
+        const chunk = part.value instanceof Uint8Array ? part.value : new Uint8Array(part.value);
+        total += chunk.byteLength;
+        if (total > cap) {
+          await reader.cancel();
+          const error = new Error("解压结果超过输出上限");
+          error.code = "cap_exceeded";
+          throw error;
+        }
+        chunks.push(chunk);
+      }
+      return concat(...chunks);
+    } finally {
+      reader.releaseLock();
+    }
   }
 
   function zlibHeader(bytes) {
@@ -2039,9 +2097,8 @@ globalThis.DT.compress = (({ ok, fail, concat }) => {
     const cmf = bytes[0], flg = bytes[1];
     if ((cmf & 0x0f) !== 8) throw new Error("不是有效的 ZLIB 数据（压缩方法非 deflate）");
     if (((cmf << 8) + flg) % 31 !== 0) throw new Error("ZLIB 头校验失败");
-    const fdict = (flg & 0x20) !== 0;
-    const skip = fdict ? 6 : 2;
-    return { body: bytes.slice(skip, bytes.length - 4), adler: bytes.slice(bytes.length - 4) };
+    if ((flg & 0x20) !== 0) throw new Error("ZLIB 预设字典数据不受支持");
+    return { body: bytes.slice(2, bytes.length - 4), adler: bytes.slice(bytes.length - 4) };
   }
   function deflateToZlib(body, raw) {
     // 用 Adler-32 手工封装：CMF=0x78, FLG 使 (CMF<<8|FLG)%31==0
@@ -2059,6 +2116,9 @@ globalThis.DT.compress = (({ ok, fail, concat }) => {
     out[0] = (b >>> 8) & 0xff; out[1] = b & 0xff;
     out[2] = (a >>> 8) & 0xff; out[3] = a & 0xff;
     return out;
+  }
+  function sameBytes(a, b) {
+    return a.length === b.length && a.every((v, i) => v === b[i]);
   }
 
   async function compressBytes(data, fmt) {
@@ -2096,18 +2156,30 @@ globalThis.DT.compress = (({ ok, fail, concat }) => {
     if (!data || !data.length) return fail("输入为空：请提供待解压数据");
     const cap = capMb * 1024 * 1024;
     try {
-      let out;
-      if (fmt === "gzip") out = await streamThrough(data, new DecompressionStream("gzip"));
-      else if (fmt === "deflate") out = await streamThrough(data, new DecompressionStream("deflate-raw"));
-      else {
-        const { body } = zlibHeader(data);
-        out = await streamThrough(body, new DecompressionStream("deflate-raw"));
+      let body = data;
+      let expectedAdler = null;
+      if (fmt === "zlib") {
+        const parsed = zlibHeader(data);
+        body = parsed.body;
+        expectedAdler = parsed.adler;
       }
-      if (out.length > cap) {
-        return fail(`解压结果超过 ${capMb} MB 上限，已终止（压缩炸弹防护）`, "cap_exceeded");
+      let out;
+      try {
+        out = await streamThrough(body, new DecompressionStream(fmt === "deflate" ? "deflate-raw" : fmt), cap);
+      } catch (e) {
+        if (e.code === "cap_exceeded") {
+          return fail(`解压结果超过 ${capMb} MB 上限，已终止（压缩炸弹防护）`, "cap_exceeded");
+        }
+        throw e;
+      }
+      if (expectedAdler && !sameBytes(adler32(out), expectedAdler)) {
+        return fail("解压失败：ZLIB 数据校验和不匹配，输入可能已损坏");
       }
       return ok(out, { fmt, in_bytes: data.length, out_bytes: out.length, label: FORMAT_NAMES[fmt] });
     } catch (e) {
+      if (e.code === "cap_exceeded") {
+        return fail(`解压结果超过 ${capMb} MB 上限，已终止（压缩炸弹防护）`, "cap_exceeded");
+      }
       return fail(`解压失败：数据不是有效的 ${FORMAT_NAMES[fmt]} 流或已损坏`, e.message);
     }
   }
@@ -2173,11 +2245,15 @@ globalThis.DT.smart = (({ ok, fail, utf8, fromUtf8 }) => {
     if (/&(#[0-9]{2,}|#[xX][0-9a-fA-F]{2,}|[a-zA-Z]{2,8});/.test(text)) trials.push(["HTML 实体解码", "html"]);
 
     for (const [action, codecId] of trials) {
+      if (["base64", "base64url", "base32", "hex"].includes(codecId)) {
+        const raw = CD.decodeBytes(codecId, compact);
+        if (raw.ok && raw.data.length) return { action, codecId, value: raw.data };
+        continue;
+      }
       const r = CD.runCodec(codecId, "decode", compact);
       if (!r.ok) continue;
       const decoded = r.data;
       if (decoded === text) continue;
-      // URL / Unicode / HTML 返回字符串；字节型返回的也是字符串（此处按文本处理）
       return { action, codecId, value: decoded };
     }
     return null;
@@ -2214,10 +2290,12 @@ globalThis.DT.smart = (({ ok, fail, utf8, fromUtf8 }) => {
         const trial = await tryStringDecoders(current);
         if (!trial) break;
         const before = current;
-        let decoded = trial.value;
-        // 若解码结果是可打印文本，先看是否藏着压缩数据
-        let bytes = null;
-        try { bytes = utf8(decoded); } catch {}
+        const decoded = trial.value;
+        // 字节型编码必须保留原始字节，否则 gzip/zip 等二进制会被错误转成逗号文本。
+        let bytes = decoded instanceof Uint8Array ? decoded : null;
+        if (!bytes) {
+          try { bytes = utf8(decoded); } catch {}
+        }
         if (bytes) {
           const comp = await tryDecompress(bytes, capMb);
           if (comp && comp.bomb) return fail(comp.error, "压缩炸弹防护终止：已保留原始输入");
@@ -2314,6 +2392,7 @@ globalThis.DT.selftest = async function () {
   t("b64 解码", CD.b64Decode("YWJj").data === "abc");
   t("b64url 无填充", CD.b64Encode("a\u00ff", { urlsafe: true }).data.indexOf("=") === -1);
   t("b32 编码", CD.b32Encode("abc").data === "MFRGG===");
+  t("b32 拒绝非法填充", !CD.b32Decode("A======").ok && !CD.b32Decode("MY=====").ok);
   t("hex 编码", CD.hexEncode("abc").data === "616263");
   t("hex 解码 0x", CD.hexDecode("0x61 0x62").data === "ab");
   t("b58 往返", CD.b58Decode(CD.b58Encode("hello").data).data === "hello");
@@ -2321,6 +2400,7 @@ globalThis.DT.selftest = async function () {
   t("url 往返", CD.urlDecode(CD.urlEncode("a b/中").data).data === "a b/中");
   t("html 往返", CD.htmlDecode(CD.htmlEncode("<a>&中").data).data === "<a>&中");
   t("unicode 往返", CD.unicodeDecode(CD.unicodeEncode("中😀").data).data === "中😀");
+  t("unicode 拒绝孤立代理", !CD.unicodeDecode("\\uD83D").ok);
   t("ascii 往返", CD.asciiDecode(CD.asciiEncode("AB").data).data === "AB");
   t("rot13 对称", CD.rot13(CD.rot13("Hello").data).data === "Hello");
   t("qp 往返", CD.qpDecode(CD.qpEncode("中文 =x").data).data === "中文 =x");
@@ -2333,6 +2413,7 @@ globalThis.DT.selftest = async function () {
     return r.ok && r.data === "QQAtTg==";
   })());
   t("utf16le 解码", CD.b64Decode("QQAtTg==", { charset: "utf-16le" }).data === "A中");
+  t("utf16le 拒绝奇数字节", !CD.b64Decode("QQ==", { charset: "utf-16le" }).ok);
   t("latin-1 编码", (() => {
     const r = CD.b64Encode("éx", { charset: "latin-1" });
     // Python: base64.b64encode("éx".encode("latin-1")) == "6Xg="
@@ -2366,6 +2447,20 @@ globalThis.DT.selftest = async function () {
     t(`hash ${algo}`, r.ok && r.data === want, r.ok ? (r.data === want ? "" : r.data) : r.error);
   }
   t("hash 全部 10 种", (await H.textHashAll("abc")).ok);
+
+  // ---- 压缩 / 二进制智能解码 ----
+  if (globalThis.DT.compress.supportsCompression && globalThis.DT.compress.supportsDecompression) {
+    const source = new TextEncoder().encode("smart gzip 你好");
+    const gz = await globalThis.DT.compress.compressBytes(source, "gzip");
+    t("gzip 往返", gz.ok && (await globalThis.DT.compress.decompressBytes(gz.data, "gzip")).ok);
+    const b64 = C.b64encode(gz.data);
+    const smart = await globalThis.DT.smart(b64, 5, 64);
+    t("Base64→GZIP 智能解码", smart.ok && smart.data.finalText === "smart gzip 你好");
+    const zlib = await globalThis.DT.compress.compressBytes(source, "zlib");
+    const broken = new Uint8Array(zlib.data);
+    broken[broken.length - 1] ^= 1;
+    t("ZLIB 校验和损坏被拒", !(await globalThis.DT.compress.decompressBytes(broken, "zlib")).ok);
+  }
 
   // ---- 加密 ----
   const DATA = new TextEncoder().encode("roundtrip 你好 😀");
@@ -3036,7 +3131,7 @@ globalThis.DT.selftest = async function () {
   };
 
   /* ================= 关于 / 自检 ================= */
-  const VERSION = "1.0";
+  const VERSION = "1.2.1";
   $("aboutVer").textContent = "v" + VERSION + " · 单文件离线版";
   $("verLabel").textContent = "Web v" + VERSION;
   async function runSelfTest(chipNode, detailNode) {
@@ -3048,7 +3143,7 @@ globalThis.DT.selftest = async function () {
     setChip(chipNode, r.failed === 0 ? `✓ 自检通过 ${r.passed}/${r.passed} · ${ms} 毫秒` : `✕ ${r.failed} 项失败`, r.failed === 0 ? "ok" : "err");
     if (detailNode) {
       detailNode.textContent = r.failed === 0
-        ? `全部 ${r.passed} 项算法校验通过（编码 16 项 · 哈希 9 项 · 加密 8 项）`
+        ? `全部 ${r.passed} 项算法校验通过（编码 25 项 · 哈希 10 项 · 压缩/智能解码 3 项 · 加密 9 项）`
         : r.items.filter((i) => !i.pass).map((i) => `${i.name}: ${i.extra}`).join("；");
     }
     return r;

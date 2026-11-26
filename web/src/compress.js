@@ -12,9 +12,29 @@ globalThis.DT.compress = (({ ok, fail, concat }) => {
   const FORMAT_NAMES = { gzip: "GZIP", zlib: "ZLIB", deflate: "DEFLATE（裸流）", zip: "ZIP", brotli: "Brotli", zstd: "Zstandard", lz4: "LZ4" };
   const UNSUPPORTED = { zip: "ZIP", brotli: "Brotli", zstd: "Zstandard", lz4: "LZ4" };
 
-  async function streamThrough(bytes, stream) {
+  async function streamThrough(bytes, stream, cap = Infinity) {
     const out = new Blob([bytes]).stream().pipeThrough(stream);
-    return new Uint8Array(await new Response(out).arrayBuffer());
+    const reader = out.getReader();
+    const chunks = [];
+    let total = 0;
+    try {
+      while (true) {
+        const part = await reader.read();
+        if (part.done) break;
+        const chunk = part.value instanceof Uint8Array ? part.value : new Uint8Array(part.value);
+        total += chunk.byteLength;
+        if (total > cap) {
+          await reader.cancel();
+          const error = new Error("解压结果超过输出上限");
+          error.code = "cap_exceeded";
+          throw error;
+        }
+        chunks.push(chunk);
+      }
+      return concat(...chunks);
+    } finally {
+      reader.releaseLock();
+    }
   }
 
   function zlibHeader(bytes) {
@@ -24,9 +44,8 @@ globalThis.DT.compress = (({ ok, fail, concat }) => {
     const cmf = bytes[0], flg = bytes[1];
     if ((cmf & 0x0f) !== 8) throw new Error("不是有效的 ZLIB 数据（压缩方法非 deflate）");
     if (((cmf << 8) + flg) % 31 !== 0) throw new Error("ZLIB 头校验失败");
-    const fdict = (flg & 0x20) !== 0;
-    const skip = fdict ? 6 : 2;
-    return { body: bytes.slice(skip, bytes.length - 4), adler: bytes.slice(bytes.length - 4) };
+    if ((flg & 0x20) !== 0) throw new Error("ZLIB 预设字典数据不受支持");
+    return { body: bytes.slice(2, bytes.length - 4), adler: bytes.slice(bytes.length - 4) };
   }
   function deflateToZlib(body, raw) {
     // 用 Adler-32 手工封装：CMF=0x78, FLG 使 (CMF<<8|FLG)%31==0
@@ -44,6 +63,9 @@ globalThis.DT.compress = (({ ok, fail, concat }) => {
     out[0] = (b >>> 8) & 0xff; out[1] = b & 0xff;
     out[2] = (a >>> 8) & 0xff; out[3] = a & 0xff;
     return out;
+  }
+  function sameBytes(a, b) {
+    return a.length === b.length && a.every((v, i) => v === b[i]);
   }
 
   async function compressBytes(data, fmt) {
@@ -81,18 +103,30 @@ globalThis.DT.compress = (({ ok, fail, concat }) => {
     if (!data || !data.length) return fail("输入为空：请提供待解压数据");
     const cap = capMb * 1024 * 1024;
     try {
-      let out;
-      if (fmt === "gzip") out = await streamThrough(data, new DecompressionStream("gzip"));
-      else if (fmt === "deflate") out = await streamThrough(data, new DecompressionStream("deflate-raw"));
-      else {
-        const { body } = zlibHeader(data);
-        out = await streamThrough(body, new DecompressionStream("deflate-raw"));
+      let body = data;
+      let expectedAdler = null;
+      if (fmt === "zlib") {
+        const parsed = zlibHeader(data);
+        body = parsed.body;
+        expectedAdler = parsed.adler;
       }
-      if (out.length > cap) {
-        return fail(`解压结果超过 ${capMb} MB 上限，已终止（压缩炸弹防护）`, "cap_exceeded");
+      let out;
+      try {
+        out = await streamThrough(body, new DecompressionStream(fmt === "deflate" ? "deflate-raw" : fmt), cap);
+      } catch (e) {
+        if (e.code === "cap_exceeded") {
+          return fail(`解压结果超过 ${capMb} MB 上限，已终止（压缩炸弹防护）`, "cap_exceeded");
+        }
+        throw e;
+      }
+      if (expectedAdler && !sameBytes(adler32(out), expectedAdler)) {
+        return fail("解压失败：ZLIB 数据校验和不匹配，输入可能已损坏");
       }
       return ok(out, { fmt, in_bytes: data.length, out_bytes: out.length, label: FORMAT_NAMES[fmt] });
     } catch (e) {
+      if (e.code === "cap_exceeded") {
+        return fail(`解压结果超过 ${capMb} MB 上限，已终止（压缩炸弹防护）`, "cap_exceeded");
+      }
       return fail(`解压失败：数据不是有效的 ${FORMAT_NAMES[fmt]} 流或已损坏`, e.message);
     }
   }
